@@ -48,8 +48,8 @@
             border: 1px solid var(--border-color);
             border-radius: 16px;
             padding: 30px;
-            width: 100%;
-            max-width: 1100px;
+            width: 98%;
+            max-width: 1800px;
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
             margin-bottom: 30px;
             transition: transform 0.3s ease;
@@ -250,7 +250,7 @@
 </head>
 <body>
 
-    <div style="width: 100%; max-width: 1100px; display: flex; gap: 10px; margin-bottom: 20px;">
+    <div style="width: 100%; max-width: 1800px; display: flex; gap: 10px; margin-bottom: 20px;">
         <button onclick="showTab('payroll')" class="tab-btn active" id="tab-btn-payroll">💳 Payroll</button>
         <button onclick="showTab('roster')" class="tab-btn" id="tab-btn-roster">📅 Roster Builder</button>
         <button onclick="showTab('staff')" class="tab-btn" id="tab-btn-staff">👨‍🍳 Staff Manager</button>
@@ -825,13 +825,21 @@
                     
                     row.days.forEach((day, dIdx) => {
                         total += (day.hours || 0);
+                        const isPreset = PRESET_SHIFTS.find(s => s.start === day.start && s.end === day.end && s.label !== 'Custom' && s.label !== 'OFF');
+                        
                         const optionsHtml = PRESET_SHIFTS.map(s => {
-                            const sel = (s.start === day.start && s.end === day.end) ? 'selected' : '';
+                            let sel = '';
+                            if (isPreset) {
+                                sel = (s.start === day.start && s.end === day.end) ? 'selected' : '';
+                            } else if (s.label === 'Custom' && day.start && day.start !== '') {
+                                sel = 'selected';
+                            } else if (!day.start && s.label === 'OFF') {
+                                sel = 'selected';
+                            }
                             return `<option value="${s.label}" data-start="${s.start}" data-end="${s.end}" ${sel}>${s.label}</option>`;
                         }).join('');
 
-                        const customHtml = (day.start === 'custom' || !PRESET_SHIFTS.find(s => s.start === day.start && s.end === day.end && s.label !== 'Custom'))
-                            && day.start && day.start !== ''
+                        const customHtml = (!isPreset && day.start && day.start !== '')
                             ? `<div style="display:flex; gap:2px; margin-top:4px;">
                                 <input type="time" class="time-input" value="${day.start}" style="width:70px; font-size:0.75rem;" onchange="updateRosterCustom(${rIdx},${dIdx},'start',this.value)">
                                 <input type="time" class="time-input" value="${day.end}" style="width:70px; font-size:0.75rem;" onchange="updateRosterCustom(${rIdx},${dIdx},'end',this.value)">
@@ -866,7 +874,10 @@
             const s = chosen.getAttribute('data-start');
             const e = chosen.getAttribute('data-end');
             if (s === 'custom') {
-                rosterRows[rIdx].days[dIdx] = { start: '', end: '', hours: 0 };
+                // Default custom to 08:00 - 16:00
+                rosterRows[rIdx].days[dIdx] = { start: '08:00', end: '16:00', hours: 8 };
+            } else if (chosen.value === 'OFF') {
+                 rosterRows[rIdx].days[dIdx] = { start: '', end: '', hours: 0 };
             } else {
                 const h = calcHours(s, e);
                 rosterRows[rIdx].days[dIdx] = { start: s, end: e, hours: h };
