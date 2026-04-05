@@ -1,0 +1,1304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wimpy De Ville Manager</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/dark.css">
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --container-bg: rgba(30, 41, 59, 0.7);
+            --primary: #3b82f6;
+            --primary-hover: #2563eb;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border-color: rgba(255, 255, 255, 0.1);
+            --accent: #10b981;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: radial-gradient(circle at top left, #1e293b, #0f172a);
+            color: var(--text-main);
+            margin: 0;
+            padding: 40px 20px;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 30px;
+            text-align: center;
+            background: -webkit-linear-gradient(45deg, #60a5fa, #a78bfa);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .glass-panel {
+            background: var(--container-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 30px;
+            width: 100%;
+            max-width: 1100px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            margin-bottom: 30px;
+            transition: transform 0.3s ease;
+        }
+
+        .upload-section {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .file-input-wrapper {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        label {
+            font-weight: 600;
+            color: #cbd5e1;
+        }
+
+        input[type="file"] {
+            padding: 10px;
+            border: 1px dashed var(--border-color);
+            border-radius: 8px;
+            background: rgba(0,0,0,0.2);
+            color: white;
+        }
+
+        button {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.3);
+        }
+
+        button:hover {
+            background: var(--primary-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.4);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            text-align: left;
+        }
+
+        th, td {
+            padding: 12px 10px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        th {
+            font-weight: 600;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            text-transform: uppercase;
+        }
+
+        input[type="number"] {
+            width: 70px;
+            padding: 6px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            background: rgba(255, 255, 255, 0.05);
+            color: white;
+            font-family: inherit;
+        }
+
+        .gross { color: #facc15; font-weight: bold; }
+        .net { color: var(--accent); font-weight: bold; }
+
+        .hidden { display: none; }
+
+        .action-row {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 20px;
+        }
+
+        .wa-link {
+            display: inline-block;
+            background: #25D366;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 6px;
+            text-decoration: none;
+            font-weight: 600;
+            margin-top: 10px;
+            margin-right: 10px;
+            transition: all 0.2s ease;
+        }
+        .wa-link:hover {
+            background: #128C7E;
+            transform: translateY(-2px);
+        }
+        .pdf-link:hover { text-decoration: underline; }
+
+        /* TABS */
+        .tab-btn {
+            background: transparent;
+            color: var(--text-muted);
+            border: 1px solid var(--border-color);
+            padding: 10px 20px;
+            cursor: pointer;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        .tab-btn.active {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+        .roster-cell {
+            padding: 5px !important;
+            min-width: 110px;
+        }
+        .time-box {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        .time-input {
+            width: 100% !important;
+            padding: 4px !important;
+            font-size: 0.8rem !important;
+            border: 1px solid rgba(255,255,255,0.1) !important;
+            background: rgba(0,0,0,0.3) !important;
+        }
+        .shift-total {
+            font-size: 0.75rem;
+            color: var(--accent);
+            text-align: center;
+            font-weight: bold;
+        }
+        .archive-item {
+            padding: 15px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        @media print {
+            .tab-btn, #upload-panel, #btn-generate, .tab-btn, h1, .action-row, #btn-download-zip, #btn-download-eft, #btn-wa-auto {
+                display: none !important;
+            }
+            .glass-panel {
+                background: white !important;
+                color: black !important;
+                border: none !important;
+                box-shadow: none !important;
+                padding: 0 !important;
+            }
+            body {
+                background: white !important;
+                padding: 0 !important;
+            }
+            table {
+                background: white !important;
+                color: black !important;
+            }
+            tr, td, th {
+                border-bottom: 1px solid #ccc !important;
+            }
+            .wa-link, .pdf-link {
+                display: none !important;
+            }
+        }
+        .roster-group-header {
+            background: rgba(139, 92, 246, 0.1);
+            color: #a78bfa;
+            font-weight: 800;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .roster-group-header td {
+            padding: 10px 15px !important;
+            border-bottom: 2px solid rgba(139, 92, 246, 0.3) !important;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+</head>
+<body>
+
+    <div style="width: 100%; max-width: 1100px; display: flex; gap: 10px; margin-bottom: 20px;">
+        <button onclick="showTab('payroll')" class="tab-btn active" id="tab-btn-payroll">💳 Payroll</button>
+        <button onclick="showTab('roster')" class="tab-btn" id="tab-btn-roster">📅 Roster Builder</button>
+        <button onclick="showTab('staff')" class="tab-btn" id="tab-btn-staff">👨‍🍳 Staff Manager</button>
+        <button onclick="showTab('archives')" class="tab-btn" id="tab-btn-archives">📁 Archives</button>
+        <button onclick="showTab('assistant')" class="tab-btn" id="tab-btn-assistant" style="background: linear-gradient(135, #8b5cf6, #3b82f6); color: white;">🤖 Manager Assistant</button>
+    </div>
+
+    <h1>Wimpy De Ville Manager</h1>
+
+    <div id="payroll-tab" class="tab-content">
+        <div class="glass-panel" id="upload-panel">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h2>Payroll Processing</h2>
+                <div style="display:flex; align-items:center; gap:12px;">
+                    <span style="color:var(--text-muted);">Week Ending (Tuesday):</span>
+                    <input type="text" id="payroll-week-date" placeholder="Pick a Tuesday..." readonly style="padding:10px; border-radius:8px; background:rgba(0,0,0,0.2); color:white; border:1px solid var(--border-color); cursor:pointer; width:160px;">
+                    <span id="payroll-week-label" style="color:var(--accent); font-weight:600; font-size:0.9rem;"></span>
+                </div>
+            </div>
+
+            <div id="roster-status-bar" style="padding:12px 16px; background:rgba(0,0,0,0.2); border-radius:8px; border:1px solid var(--border-color); margin-bottom:16px; display:flex; align-items:center; gap:10px;">
+                <span id="roster-status-icon">📂</span>
+                <span id="roster-status-text" style="color:var(--text-muted);">Select a week ending date to auto-load the matching roster.</span>
+            </div>
+
+            <div class="upload-section">
+                <div class="file-input-wrapper">
+                    <label>Override Clock-in Report (Excel)</label>
+                    <input type="file" id="file-clockin" accept=".xlsx">
+                </div>
+                <div class="file-input-wrapper">
+                    <label>Override Roster (Excel)</label>
+                    <input type="file" id="file-roster" accept=".xlsx">
+                </div>
+            </div>
+            <div style="display: flex; gap: 15px; margin-top: 10px;">
+                <button id="btn-process">Process Payroll Data</button>
+                <button id="btn-accrue" style="background: var(--accent);">Accrue Monthly Leave (+1.5)</button>
+                <button onclick="resetPayroll()" style="background: transparent; border: 1px solid #ef4444; color: #ef4444;">❌ Reset Payroll</button>
+            </div>
+            <div style="margin-top: 20px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 20px;">
+                <p style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 10px;">Fully automate data retrieval:</p>
+                <div style="display: flex; gap: 10px;">
+                    <button id="btn-fetch" style="background: #8b5cf6; flex: 2; height: 50px;">🚀 Auto-Fetch Ankerdata Reports</button>
+                    <button id="btn-fetch-mock" style="background: rgba(255,255,255,0.1); flex: 1; border: 1px dashed rgba(255,255,255,0.2); font-size: 0.85rem; height: 50px;">🧪 Test: Simulate Fetch</button>
+                </div>
+            </div>
+        </div>
+
+    <div class="glass-panel hidden" id="table-panel">
+        <h2>Adjust Deductions & Rates</h2>
+        <div style="overflow-x: auto;">
+            <table id="payroll-table">
+                <thead>
+                    <tr>
+                        <th style="width: 50px;">Paid?</th>
+                        <th>Employee</th>
+                        <th>Reg Hrs (W-M)</th>
+                        <th>Sun Hrs</th>
+                        <th>Tue Hrs (Shift)</th>
+                        <th>Hol Hrs</th>
+                        <th>Leave (Days)</th>
+                        <th>Sick (Days)</th>
+                        <th>Rate (R)</th>
+                        <th>Gross (R)</th>
+                        <th>Till Short</th>
+                        <th>Bonus</th>
+                        <th>Tips</th>
+                        <th>Clothing</th>
+                        <th>UIF (1%)</th>
+                        <th>Net (R)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Rows injected here -->
+                </tbody>
+            </table>
+        </div>
+        <div class="action-row" style="display:flex; gap:10px;">
+            <button id="btn-generate">Generate Payslips</button>
+            <button onclick="resetPayroll()" style="background: transparent; border: 1px solid #ef4444; color: #ef4444;">❌ Reset Payroll</button>
+        </div>
+    </div>
+
+    <div class="glass-panel hidden" id="results-panel">
+        <h2>Payslips Generated!</h2>
+        <div style="display: flex; gap: 15px; margin-bottom: 20px;">
+            <a href="/api/download_all" id="btn-download-zip" style="background:var(--primary); padding: 10px 20px; border-radius: 8px; text-decoration:none; color:white; font-weight:600;">📥 Download All (ZIP)</a>
+            <a href="/api/download_merged_pdf" id="btn-download-merged" style="background:#8b5cf6; padding: 10px 20px; border-radius: 8px; text-decoration:none; color:white; font-weight:600;">📚 Merge & Download All PDFs</a>
+            <button id="btn-download-eft" style="background: #10b981; padding: 10px 20px; border-radius: 8px; border:none; color:white; font-weight:600; cursor:pointer;">📊 Download EFT (Excel)</button>
+            <button id="btn-download-eft-pdf" style="background: #ef4444; padding: 10px 20px; border-radius: 8px; border:none; color:white; font-weight:600; cursor:pointer;">📄 Download EFT (PDF)</button>
+            <button id="btn-wa-auto" style="background: #128c7e; padding: 10px 20px; border-radius: 8px; border:none; color:white; font-weight:600; cursor:pointer;">🤖 Auto-Send All WhatsApp</button>
+            <button onclick="window.print()" style="background: #64748b; padding: 10px 20px; border-radius: 8px; border:none; color:white; font-weight:600; cursor:pointer;">🖨️ Print Summary</button>
+        </div>
+        
+        <div id="links-container" style="display: flex; flex-direction: column; gap: 15px;"></div>
+        
+        <div style="margin-top: 30px;">
+            <h2>EFT Payment Summary</h2>
+            <table id="eft-table" style="width: 100%; border-collapse: collapse; margin-top: 10px; background: rgba(0,0,0,0.2); border-radius: 8px; overflow: hidden;">
+                <thead>
+                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.2);">
+                        <th style="padding: 10px;">Employee</th>
+                        <th style="padding: 10px; text-align: right;">Final Net Pay (R)</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+    <div id="roster-tab" class="tab-content hidden">
+        <div class="glass-panel">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2>Roster Builder</h2>
+                <div style="display:flex; align-items:center; gap:12px;">
+                    <button onclick="showTab('assistant')" style="background:rgba(139, 92, 246, 0.2); color:#a78bfa; border:1px solid #8b5cf6; padding:8px 15px; border-radius:8px; font-size:0.9rem; cursor:pointer;">🤖 Ask AI for Roster Help</button>
+                    <span style="color:var(--text-muted);">Week Ending (Tuesday):</span>
+                    <input type="text" id="roster-week-date" placeholder="Pick a Tuesday..." readonly style="padding: 10px; border-radius: 8px; background: rgba(0,0,0,0.2); color:white; border: 1px solid var(--border-color); cursor:pointer; width:160px;">
+                    <span id="roster-week-display" style="color:var(--accent); font-weight:600;"></span>
+                </div>
+            </div>
+            
+            <div id="roster-capture-area" style="background: var(--bg); padding: 10px; border-radius: 8px; margin-top:15px;">
+                <div style="overflow-x: auto;">
+                    <table id="roster-table">
+                        <thead>
+                            <tr id="roster-header-row">
+                                <th style="min-width: 150px;">Employee</th>
+                                <th id="hdr-Wed">Wed</th>
+                                <th id="hdr-Thu">Thu</th>
+                                <th id="hdr-Fri">Fri</th>
+                                <th id="hdr-Sat">Sat</th>
+                                <th id="hdr-Sun">Sun</th>
+                                <th id="hdr-Mon">Mon</th>
+                                <th id="hdr-Tue">Tue</th>
+                                <th>Total</th>
+                            </tr>
+                        </thead>
+                        <tbody id="roster-body"></tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div class="action-row" style="display:flex; gap:10px;">
+                <button id="btn-save-roster" style="background: var(--accent);">💾 Save & Archive Roster</button>
+                <button onclick="shareRosterImage()" style="background: #10b981;">📸 Send Roster as Image</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="staff-tab" class="tab-content hidden">
+        <div class="glass-panel">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2>Employee Directory</h2>
+                <button onclick="openStaffForm()" style="background:var(--accent);">➕ Add New Staff Member</button>
+            </div>
+            
+            <div style="overflow-x: auto;">
+                <table id="staff-directory-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Role</th>
+                            <th>Rate (R)</th>
+                            <th>Phone</th>
+                            <th>Leave Credit</th>
+                            <th style="text-align:right;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="staff-form-container" class="glass-panel hidden" style="margin-top: 20px;">
+            <h3 id="staff-form-title">Add New Staff Member</h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
+                <div class="file-input-wrapper">
+                    <label>Full Name</label>
+                    <input type="text" id="staff-name" placeholder="John Doe" style="padding:10px; border-radius:8px; background:rgba(0,0,0,0.2); color:white; border:1px solid var(--border-color);">
+                </div>
+                <div class="file-input-wrapper">
+                    <label>Role</label>
+                    <input type="text" id="staff-role" placeholder="WAITER" style="padding:10px; border-radius:8px; background:rgba(0,0,0,0.2); color:white; border:1px solid var(--border-color);">
+                </div>
+                <div class="file-input-wrapper">
+                    <label>Pay Rate (Hourly R)</label>
+                    <input type="number" step="0.01" id="staff-rate" value="30.33" style="padding:10px; border-radius:8px; background:rgba(0,0,0,0.2); color:white; border:1px solid var(--border-color);">
+                </div>
+                <div class="file-input-wrapper">
+                    <label>Cell Number</label>
+                    <input type="text" id="staff-phone" placeholder="0821234567" style="padding:10px; border-radius:8px; background:rgba(0,0,0,0.2); color:white; border:1px solid var(--border-color);">
+                </div>
+                <div class="file-input-wrapper">
+                    <label>ID Number</label>
+                    <input type="text" id="staff-id" style="padding:10px; border-radius:8px; background:rgba(0,0,0,0.2); color:white; border:1px solid var(--border-color);">
+                </div>
+                <div class="file-input-wrapper">
+                    <label>Start Date</label>
+                    <input type="date" id="staff-start" style="padding:10px; border-radius:8px; background:rgba(0,0,0,0.2); color:white; border:1px solid var(--border-color);">
+                </div>
+                <div class="file-input-wrapper">
+                    <label>Initial Leave Credit (Days)</label>
+                    <input type="number" step="0.5" id="staff-leave" value="0" style="padding:10px; border-radius:8px; background:rgba(0,0,0,0.2); color:white; border:1px solid var(--border-color);">
+                </div>
+            </div>
+            <div class="action-row" style="margin-top: 20px; gap: 10px;">
+                <button onclick="closeStaffForm()" style="background:transparent; border:1px solid var(--border-color);">Cancel</button>
+                <button onclick="saveStaffMember()" style="background:var(--primary);">Save Staff Member</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="archives-tab" class="tab-content hidden">
+        <div class="glass-panel">
+            <h2>Archive History</h2>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 40px;">
+                <div>
+                    <h3 style="color:var(--primary);"><span style="margin-right:8px;">💳</span> Past Payrolls</h3>
+                    <div id="archive-pay-list" style="display: flex; flex-direction: column; gap: 10px; margin-top: 20px;"></div>
+                </div>
+                <div>
+                    <h3 style="color:var(--accent);"><span style="margin-right:8px;">📅</span> Past Rosters</h3>
+                    <div id="archive-rost-list" style="display: flex; flex-direction: column; gap: 10px; margin-top: 20px;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="assistant-tab" class="tab-content hidden">
+        <div class="glass-panel" style="height: 600px; display: flex; flex-direction: column;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h2>AI Manager Assistant</h2>
+                <span id="ai-status" style="font-size:0.8rem; color:var(--text-muted);">Powered by Gemini 1.5 Flash</span>
+            </div>
+            
+            <div id="ai-chat-window" style="flex:1; overflow-y:auto; background:rgba(0,0,0,0.2); border-radius:12px; padding:20px; margin-bottom:15px; display:flex; flex-direction:column; gap:15px;">
+                <div style="align-self:flex-start; background:rgba(255,255,255,0.05); padding:12px 16px; border-radius:12px; max-width:80%; color:#cbd5e1;">
+                    👋 Hi Manager! I'm your AI Assistant. I have access to your staff list and current roster. How can I help you today?
+                </div>
+            </div>
+
+            <div style="display:flex; gap:10px;">
+                <input type="text" id="ai-input" placeholder="e.g. 'Build a roster for next week' or 'Who has 9 days leave?'" 
+                       style="flex:1; padding:15px; border-radius:10px; background:rgba(0,0,0,0.3); border:1px solid var(--border-color); color:white;">
+                <button id="btn-ai-send" style="width:100px; background:var(--accent); border-radius:10px; border:none; color:white; font-weight:600; cursor:pointer;">Send</button>
+            </div>
+        </div>
+
+        <!-- API KEY SETUP PANEL -->
+        <div id="api-key-panel" class="glass-panel" style="margin-top:20px; border: 1px solid #f59e0b; display:none;">
+            <h3 style="color:#f59e0b; margin-top:0;">⚠️ AI Setup Required</h3>
+            <p style="font-size:0.9rem; color:#d1d5db;">To use the AI Assistant, you need a free Gemini API Key from Google AI Studio.</p>
+            <div style="display:flex; gap:10px; margin-top:10px;">
+                <input type="password" id="input-api-key" placeholder="Paste your API Key here..." style="flex:1; padding:10px; border-radius:8px; background:rgba(0,0,0,0.3); border:1px solid rgba(245,158,11,0.3); color:white;">
+                <button onclick="saveApiKey()" style="background:#f59e0b; color:black; font-weight:600; border:none; padding:8px 15px; border-radius:8px; cursor:pointer;">Enable AI</button>
+            </div>
+            <p style="font-size:0.8rem; margin-top:10px;"><a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:#f59e0b; text-decoration:none;">Get your free API key here &raquo;</a></p>
+        </div>
+    </div>
+
+    <script>
+        let employeesData = [];
+        let currentLinks = [];
+        let rosterRows = [];
+        let masterStaff = [];
+        let currentRosterWeekDate = null;
+        let currentPayrollWeekDate = null;
+
+        // Preset shifts from the test roster
+        const PRESET_SHIFTS = [
+            { label: 'OFF',        start: '',      end: '' },
+            { label: '07:00-13:30', start: '07:00', end: '13:30' },
+            { label: '07:00-14:30', start: '07:00', end: '14:30' },
+            { label: '07:00-15:30', start: '07:00', end: '15:30' },
+            { label: '07:00-17:30', start: '07:00', end: '17:30' },
+            { label: '09:00-15:30', start: '09:00', end: '15:30' },
+            { label: '09:00-17:30', start: '09:00', end: '17:30' },
+            { label: '10:00-15:30', start: '10:00', end: '15:30' },
+            { label: '10:00-17:30', start: '10:00', end: '17:30' },
+            { label: '11:00-17:30', start: '11:00', end: '17:30' },
+            { label: 'Custom',     start: 'custom', end: '' },
+        ];
+
+        function calcHours(start, end) {
+            if (!start || !end) return 0;
+            const [sh, sm] = start.split(':').map(Number);
+            const [eh, em] = end.split(':').map(Number);
+            let diff = (eh + em/60) - (sh + sm/60);
+            if (diff < 0) diff += 24;
+            return Math.max(0, diff);
+        }
+
+        // ---- Payroll Week Picker ----
+        window.onPayrollWeekChange = async function(val) {
+            if (!val) return;
+            currentPayrollWeekDate = val;
+            const d = new Date(val);
+            // Week is Wed-Tue, so Wed = 6 days before Tue
+            const wed = new Date(d); wed.setDate(d.getDate() - 6);
+            const fmt = dt => dt.toLocaleDateString('en-ZA', { day:'2-digit', month:'short' });
+            document.getElementById('payroll-week-label').innerText =
+                fmt(wed) + ' – ' + fmt(d);
+
+            // Try to find matching archived roster
+            const res = await fetch('/api/archives');
+            const data = await res.json();
+            const matchKey = `Roster_${val}.xlsx`;
+            const found = (data.rosters || []).find(r => r === matchKey);
+            const statusIcon = document.getElementById('roster-status-icon');
+            const statusText = document.getElementById('roster-status-text');
+            if (found) {
+                statusIcon.innerText = '✅';
+                statusText.style.color = '#10b981';
+                statusText.innerText = `Roster found for week ending ${val} — will be loaded automatically when processing.`;
+                // Tell the server which archived roster to use
+                await fetch('/api/set_active_roster', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ week_date: val })
+                });
+            } else {
+                statusIcon.innerText = '⚠️';
+                statusText.style.color = '#f59e0b';
+                statusText.innerText = `No saved roster found for ${val}. Upload one manually below or build & save it in the Roster Builder first.`;
+            }
+        }
+
+        // ---- Roster Week Picker (Wed–Tue) ----
+        window.onRosterWeekChange = function(val) {
+            if (!val) return;
+            currentRosterWeekDate = val;
+            const d = new Date(val); // This is Tuesday (week end)
+            // Column order: Wed, Thu, Fri, Sat, Sun, Mon, Tue
+            const days = ['Wed','Thu','Fri','Sat','Sun','Mon','Tue'];
+
+            // Wed is 6 days before Tue
+            for (let i = 0; i < 7; i++) {
+                const dt = new Date(d);
+                dt.setDate(d.getDate() - (6 - i));
+                const dayStr = dt.toLocaleDateString('en-ZA', { day:'2-digit', month:'2-digit' });
+                const hdr = document.getElementById('hdr-' + days[i]);
+                if (hdr) hdr.innerHTML = `${days[i]}<br><small style="font-weight:400;color:var(--text-muted);">${dayStr}</small>`;
+            }
+            document.getElementById('roster-week-display').innerText =
+                d.toLocaleDateString('en-ZA', { day:'2-digit', month:'short', year:'numeric' });
+        }
+
+        async function init() {
+            await loadStaffList();
+            loadArchives();
+
+            // Initialize Flatpickr calendar on both date pickers
+            // Restrict to Tuesdays only (weekday 2) since our week ends on Tuesday
+            const fpConfig = {
+                theme: "dark",
+                dateFormat: "Y-m-d",
+                disableMobile: true,
+                onDayCreate: function(dObj, dStr, fp, dayElem) {
+                    // Grey out non-Tuesdays visually
+                    if (dayElem.dateObj.getDay() !== 2) {
+                        dayElem.style.opacity = "0.3";
+                    }
+                },
+                onChange: function(selectedDates, dateStr) {
+                    // Allow any day but show message if not Tuesday
+                }
+            };
+
+            flatpickr("#payroll-week-date", {
+                ...fpConfig,
+                onChange: function(selectedDates, dateStr) {
+                    onPayrollWeekChange(dateStr);
+                }
+            });
+
+            flatpickr("#roster-week-date", {
+                ...fpConfig,
+                onChange: function(selectedDates, dateStr) {
+                    onRosterWeekChange(dateStr);
+                }
+            });
+        }
+        init();
+
+
+        async function loadStaffList() {
+            const res = await fetch('/api/staff');
+            const data = await res.json();
+            masterStaff = data.staff || [];
+            
+            // Build Roster rows from master staff
+            rosterRows = masterStaff.map(s => ({
+                name: s.name,
+                role: s.role,
+                days: Array(7).fill(null).map(() => ({ start: "", end: "", hours: 0 }))
+            }));
+            
+            renderRoster();
+            renderStaffDirectory();
+        }
+
+        window.showTab = function(tab) {
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(tab + '-tab').classList.remove('hidden');
+            document.getElementById('tab-btn-' + tab).classList.add('active');
+            if(tab === 'archives') loadArchives();
+            if(tab === 'staff') loadStaffList();
+        }
+
+        function renderStaffDirectory() {
+            const tbody = document.querySelector('#staff-directory-table tbody');
+            tbody.innerHTML = '';
+            masterStaff.forEach((s) => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${s.name}</td>
+                    <td>${s.role}</td>
+                    <td>${s.rate.toFixed(2)}</td>
+                    <td>${s.cell_number}</td>
+                    <td>${s.leave_credit}</td>
+                    <td style="text-align:right;">
+                        <button onclick="editStaffMember('${s.name}')" style="background:#3b82f6; padding:5px 10px; font-size:0.8rem; margin-right:5px;">Edit</button>
+                        <button onclick="deleteStaffMember('${s.name}')" style="background:#ef4444; padding:5px 10px; font-size:0.8rem;">Delete</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        window.openStaffForm = () => {
+            document.getElementById('staff-form-title').innerText = "Add New Staff Member";
+            document.getElementById('staff-name').value = "";
+            document.getElementById('staff-role').value = "WAITER";
+            document.getElementById('staff-rate').value = "30.33";
+            document.getElementById('staff-phone').value = "";
+            document.getElementById('staff-id').value = "";
+            document.getElementById('staff-start').value = "";
+            document.getElementById('staff-leave').value = "0";
+            document.getElementById('staff-form-container').classList.remove('hidden');
+        }
+
+        window.closeStaffForm = () => {
+            document.getElementById('staff-form-container').classList.add('hidden');
+        }
+
+        window.editStaffMember = (name) => {
+            const s = masterStaff.find(x => x.name === name);
+            if(!s) return;
+            document.getElementById('staff-form-title').innerText = "Edit " + s.name;
+            document.getElementById('staff-name').value = s.name;
+            document.getElementById('staff-role').value = s.role;
+            document.getElementById('staff-rate').value = s.rate;
+            document.getElementById('staff-phone').value = s.cell_number;
+            document.getElementById('staff-id').value = s.id_number;
+            document.getElementById('staff-start').value = s.start_date;
+            document.getElementById('staff-leave').value = s.leave_credit;
+            document.getElementById('staff-form-container').classList.remove('hidden');
+        }
+
+        window.saveStaffMember = async () => {
+            const payload = {
+                staff: {
+                    name: document.getElementById('staff-name').value,
+                    role: document.getElementById('staff-role').value,
+                    rate: parseFloat(document.getElementById('staff-rate').value),
+                    cell_number: document.getElementById('staff-phone').value,
+                    id_number: document.getElementById('staff-id').value,
+                    start_date: document.getElementById('staff-start').value,
+                    leave_credit: parseFloat(document.getElementById('staff-leave').value)
+                }
+            };
+            if(!payload.staff.name) return alert("Name is required");
+            
+            const res = await fetch('/api/staff/update', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            if(data.success) {
+                closeStaffForm();
+                loadStaffList();
+            } else {
+                alert("Error saving: " + data.error);
+            }
+        }
+
+        window.deleteStaffMember = async (name) => {
+            if(!confirm("Are you sure you want to delete " + name + "?")) return;
+            const res = await fetch('/api/staff/delete', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ name: name })
+            });
+            const data = await res.json();
+            if(data.success) {
+                loadStaffList();
+            } else {
+                alert("Error deleting: " + data.error);
+            }
+        }
+
+        async function loadArchives() {
+            const res = await fetch('/api/archives');
+            const data = await res.json();
+            
+            const payList = document.getElementById('archive-pay-list');
+            payList.innerHTML = '';
+            data.payslips.forEach(p => {
+                const div = document.createElement('div');
+                div.className = 'archive-item';
+                div.innerHTML = `
+                    <span>${p.replace('Payroll_', '')}</span>
+                    <span style="font-size:0.8rem; color:var(--text-muted);">Stored in Archives/Payslips</span>
+                `;
+                payList.appendChild(div);
+            });
+
+            const rostList = document.getElementById('archive-rost-list');
+            rostList.innerHTML = '';
+            data.rosters.forEach(r => {
+                const div = document.createElement('div');
+                div.className = 'archive-item';
+                div.innerHTML = `
+                    <span>${r.replace('Roster_', '').replace('.xlsx', '')}</span>
+                    <span style="font-size:0.8rem; color:var(--text-muted);">Stored in Archives/Rosters</span>
+                `;
+                rostList.appendChild(div);
+            });
+        }
+
+        function renderRoster() {
+            const tbody = document.querySelector('#roster-table tbody');
+            tbody.innerHTML = '';
+            
+            // Group indices so we can still use the correct original index for updates
+            const groups = {};
+            rosterRows.forEach((row, idx) => {
+                const r = row.role || 'OTHER';
+                if (!groups[r]) groups[r] = [];
+                groups[r].push({ data: row, originalIndex: idx });
+            });
+
+            // Priority: GRILLER, WAITER, then alphabetically
+            const sortedRoles = Object.keys(groups).sort((a,b) => {
+                if(a === 'GRILLER') return -1;
+                if(b === 'GRILLER') return 1;
+                if(a === 'WAITER') return -1;
+                if(b === 'WAITER') return 1;
+                return a.localeCompare(b);
+            });
+
+            sortedRoles.forEach(role => {
+                // Group Header (Hide if 'OTHER' or empty)
+                if (role && role !== 'OTHER') {
+                    const hRow = document.createElement('tr');
+                    hRow.className = 'roster-group-header';
+                    hRow.innerHTML = `<td colspan="9" style="text-align:left; padding-left:15px;">${role}S</td>`;
+                    tbody.appendChild(hRow);
+                }
+
+                groups[role].forEach(item => {
+                    const row = item.data;
+                    const rIdx = item.originalIndex;
+                    const tr = document.createElement('tr');
+                    let total = 0;
+                    let cells = `<td style="font-weight:600; color:var(--accent);">${row.name}</td>`;
+                    
+                    row.days.forEach((day, dIdx) => {
+                        total += (day.hours || 0);
+                        const optionsHtml = PRESET_SHIFTS.map(s => {
+                            const sel = (s.start === day.start && s.end === day.end) ? 'selected' : '';
+                            return `<option value="${s.label}" data-start="${s.start}" data-end="${s.end}" ${sel}>${s.label}</option>`;
+                        }).join('');
+
+                        const customHtml = (day.start === 'custom' || !PRESET_SHIFTS.find(s => s.start === day.start && s.end === day.end && s.label !== 'Custom'))
+                            && day.start && day.start !== ''
+                            ? `<div style="display:flex; gap:2px; margin-top:4px;">
+                                <input type="time" class="time-input" value="${day.start}" style="width:70px; font-size:0.75rem;" onchange="updateRosterCustom(${rIdx},${dIdx},'start',this.value)">
+                                <input type="time" class="time-input" value="${day.end}" style="width:70px; font-size:0.75rem;" onchange="updateRosterCustom(${rIdx},${dIdx},'end',this.value)">
+                               </div>`
+                            : '';
+
+                        cells += `
+                            <td class="roster-cell">
+                                <select class="roster-select" onchange="updateRosterPreset(${rIdx},${dIdx},this)" style="background:rgba(0,0,0,0.3); color:white; border:1px solid var(--border-color); border-radius:6px; padding:4px; width:100%; font-size:0.8rem;">
+                                    ${optionsHtml}
+                                </select>
+                                ${customHtml}
+                                <div class="shift-total" style="font-size:0.75rem; color:var(--text-muted); margin-top:2px; text-align:center;">${day.hours > 0 ? day.hours.toFixed(1) + 'h' : ''}</div>
+                            </td>
+                        `;
+                    });
+                    
+                    cells += `<td style="font-weight:bold; color:var(--accent); text-align:right;">${total.toFixed(1)}</td>`;
+                    tr.innerHTML = cells;
+                    tbody.appendChild(tr);
+                });
+
+                // Spacing Row
+                const spaceRow = document.createElement('tr');
+                spaceRow.innerHTML = `<td colspan="9" style="height:25px; border:none;"></td>`;
+                tbody.appendChild(spaceRow);
+            });
+        }
+
+        window.updateRosterPreset = (rIdx, dIdx, sel) => {
+            const chosen = sel.options[sel.selectedIndex];
+            const s = chosen.getAttribute('data-start');
+            const e = chosen.getAttribute('data-end');
+            if (s === 'custom') {
+                rosterRows[rIdx].days[dIdx] = { start: '', end: '', hours: 0 };
+            } else {
+                const h = calcHours(s, e);
+                rosterRows[rIdx].days[dIdx] = { start: s, end: e, hours: h };
+            }
+            renderRoster();
+        }
+
+        window.updateRosterCustom = (rIdx, dIdx, key, val) => {
+            rosterRows[rIdx].days[dIdx][key] = val;
+            const d = rosterRows[rIdx].days[dIdx];
+            rosterRows[rIdx].days[dIdx].hours = calcHours(d.start, d.end);
+            renderRoster();
+        }
+
+        document.getElementById('btn-save-roster').addEventListener('click', async () => {
+            const weekDateVal = currentRosterWeekDate || document.getElementById('roster-week-date').value;
+            if(!weekDateVal) return alert("Please select a Week Ending date.");
+            
+            const weekDate = new Date(weekDateVal); // Tuesday
+            const dates = [];
+            // Week runs Wed-Tue: Wed is 6 days before Tue
+            for(let i=0; i<7; i++) {
+                const d = new Date(weekDate);
+                d.setDate(weekDate.getDate() - (6-i));
+                dates.push(d.toISOString().split('T')[0]);
+            }
+
+            const exportRows = rosterRows.map(r => {
+                const item = { NAME: r.name };
+                let total = 0;
+                // Preprocess columns to match dates
+                r.days.forEach((d, i) => {
+                    const colName = dates[i];
+                    if (d.start && d.end) {
+                        const h = d.hours;
+                        item[colName] = `${d.start}-${d.end} (${h.toFixed(1)})`;
+                        total += h;
+                    } else {
+                        item[colName] = "OFF";
+                    }
+                });
+                item.TOTAL = total.toFixed(1);
+                return item;
+            });
+
+            const res = await fetch('/api/save_roster', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ week_date: weekDateVal, rows: exportRows })
+            });
+            const data = await res.json();
+            alert(data.message);
+            showTab('archives');
+        });
+
+        document.getElementById('btn-wa-auto').addEventListener('click', async () => {
+            if (!confirm("This will launch an automated WhatsApp bot. Make sure your phone is ready to scan the QR code if needed. Proceed?")) return;
+            const res = await fetch('/api/whatsapp_send', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ links: currentLinks })
+            });
+            alert("WhatsApp bot launched! Watch your Chrome browser.");
+        });
+
+        document.getElementById('btn-download-eft').addEventListener('click', async () => {
+            const res = await fetch('/api/download_eft', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ links: currentLinks })
+            });
+            const blob = await res.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = "EFT_Summary.xlsx";
+            a.click();
+        });
+
+        document.getElementById('btn-download-eft-pdf').addEventListener('click', async () => {
+            const res = await fetch('/api/download_eft_pdf', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ links: currentLinks })
+            });
+            const blob = await res.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `EFT_Summary_${new Date().toISOString().split('T')[0]}.pdf`;
+            a.click();
+        });
+
+        window.copyToClipboard = async (filePath) => {
+            await fetch('/api/copy_to_clipboard', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path: filePath })
+            });
+        };
+
+        window.printFile = async (filePath) => {
+            await fetch('/api/print_file', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path: filePath })
+            });
+        };
+
+        window.sendManualWA = async (waUrl, filePath, btn) => {
+            const originalText = btn.innerText;
+            btn.innerText = "⏳ Copying PDF...";
+            btn.disabled = true;
+            try {
+                await fetch('/api/copy_to_clipboard', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: filePath })
+                });
+                // Short delay to ensure clipboard is ready
+                setTimeout(() => {
+                    window.location.href = waUrl;
+                    btn.innerText = originalText;
+                    btn.disabled = false;
+                }, 500);
+            } catch (e) {
+                alert("Clipboard error: " + e);
+                btn.innerText = originalText;
+                btn.disabled = false;
+            }
+        };
+
+        document.getElementById('btn-accrue').addEventListener('click', async () => {
+            if (!confirm("Are you sure you want to add 1.5 leave days to everyone in Staff_Details_Template.xlsx?")) return;
+            const res = await fetch('/api/accrue_leave', { method: 'POST' });
+            const data = await res.json();
+            alert(data.message);
+        });
+
+        document.getElementById('btn-fetch').addEventListener('click', async () => {
+            document.getElementById('btn-fetch').innerText = "Fetching securely... (Please wait)";
+            const res = await fetch('/api/fetch_ankerdata', { method: 'POST' });
+            const data = await res.json();
+            if(data.success) {
+                alert("Files downloaded successfully! You can now hit Process Payroll Data.");
+                document.getElementById('btn-fetch').innerText = "✅ Done! Hit Process Payroll Data";
+            } else {
+                alert("Failed: " + data.error);
+                document.getElementById('btn-fetch').innerText = "🚀 Auto-Fetch Ankerdata Reports";
+            }
+        });
+
+        document.getElementById('btn-fetch-mock').addEventListener('click', async () => {
+            const btn = document.getElementById('btn-fetch-mock');
+            btn.innerText = "Simulating...";
+            const res = await fetch('/api/fetch_mock', { method: 'POST' });
+            const data = await res.json();
+            if(data.success) {
+                alert("Simulation Successful! Mock files have been 'downloaded'. Now click 'Process' to see the results.");
+                document.getElementById('btn-fetch').innerText = "✅ Mock Data Ready! Hit Process";
+                btn.innerText = "🧪 Simulate Success!";
+            } else {
+                alert("Mock failed: " + data.error);
+                btn.innerText = "🧪 Simulate Fetch";
+            }
+        });
+
+        document.getElementById('btn-process').addEventListener('click', async () => {
+            const btn = document.getElementById('btn-process');
+            if (btn.disabled) return;
+            
+            const roster = document.getElementById('file-roster').files[0];
+            const clockin = document.getElementById('file-clockin').files[0];
+
+            const formData = new FormData();
+            if (roster) formData.append("roster", roster);
+            if (clockin) formData.append("clockin", clockin);
+
+            btn.innerText = "Processing...";
+            btn.disabled = true;
+
+            const res = await fetch('/api/process', { method: 'POST', body: formData });
+            const data = await res.json();
+            
+            employeesData = data.employees.map(emp => ({
+                ...emp,
+                include: (!emp.role || emp.role.toUpperCase() !== 'SUPERVISOR') 
+            }));
+            renderTable();
+            
+            document.getElementById('upload-panel').classList.add('hidden');
+            document.getElementById('table-panel').classList.remove('hidden');
+            btn.disabled = false;
+        });
+
+        function calculateTotals(emp) {
+            const gross = (emp.reg_hours * emp.rate) + (emp.sun_hours * emp.rate * 1.5) + ((emp.tue_hours || 0) * emp.rate) + ((emp.hol_hours || 0) * emp.rate * 2) + ((emp.leave_days || 0) * 7 * emp.rate) + ((emp.sick_days || 0) * 7 * emp.rate) + emp.bonus - emp.till_short;
+            const uif = gross * 0.01;
+            const deduct = emp.tips + uif + emp.clothing;
+            const net = gross - deduct;
+            return { gross: Math.max(0, gross), uif: Math.max(0, uif), net: Math.max(0, net) };
+        }
+
+        function renderTable() {
+            const tbody = document.querySelector('#payroll-table tbody');
+            tbody.innerHTML = '';
+
+            employeesData.forEach((emp, index) => {
+                const totals = calculateTotals(emp);
+                const tr = document.createElement('tr');
+                if (!emp.include) tr.style.opacity = '0.5';
+                
+                tr.innerHTML = `
+                    <td><input type="checkbox" ${emp.include ? 'checked' : ''} onchange="toggleInclude(${index}, this)" style="width:20px; height:20px; cursor:pointer;"></td>
+                    <td style="font-weight:600; color:${emp.include ? 'var(--text-main)' : 'var(--text-muted)'}">${emp.name}</td>
+                    <td>${emp.reg_hours.toFixed(2)}</td>
+                    <td>${emp.sun_hours.toFixed(2)}</td>
+                    <td><input type="number" step="0.01" value="${emp.tue_hours || 0}" onchange="updateVal(${index}, 'tue_hours', this.value)"></td>
+                    <td><input type="number" step="0.01" value="${emp.hol_hours || 0}" onchange="updateVal(${index}, 'hol_hours', this.value)"></td>
+                    <td><input type="number" step="0.01" value="${emp.leave_days || 0}" onchange="updateVal(${index}, 'leave_days', this.value)"></td>
+                    <td><input type="number" step="0.01" value="${emp.sick_days || 0}" onchange="updateVal(${index}, 'sick_days', this.value)"></td>
+                    <td><input type="number" step="0.01" value="${emp.rate}" onchange="updateVal(${index}, 'rate', this.value)"></td>
+                    <td class="gross" id="gross-${index}">${totals.gross.toFixed(2)}</td>
+                    <td><input type="number" step="0.01" value="${emp.till_short}" onchange="updateVal(${index}, 'till_short', this.value)"></td>
+                    <td><input type="number" step="0.01" value="${emp.bonus}" onchange="updateVal(${index}, 'bonus', this.value)"></td>
+                    <td><input type="number" step="0.01" value="${emp.tips}" onchange="updateVal(${index}, 'tips', this.value)"></td>
+                    <td><input type="number" step="0.01" value="${emp.clothing}" onchange="updateVal(${index}, 'clothing', this.value)"></td>
+                    <td id="uif-${index}">${totals.uif.toFixed(2)}</td>
+                    <td class="net" id="net-${index}">${totals.net.toFixed(2)}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        window.updateVal = (index, key, val) => {
+            employeesData[index][key] = parseFloat(val) || 0;
+            const totals = calculateTotals(employeesData[index]);
+            document.getElementById(`gross-${index}`).innerText = totals.gross.toFixed(2);
+            document.getElementById(`uif-${index}`).innerText = totals.uif.toFixed(2);
+            document.getElementById(`net-${index}`).innerText = totals.net.toFixed(2);
+        };
+
+        window.toggleInclude = (index, cb) => {
+            employeesData[index].include = cb.checked;
+            renderTable();
+        };
+
+        document.getElementById('btn-generate').addEventListener('click', async () => {
+            const btn = document.getElementById('btn-generate');
+            if (btn.disabled) return;
+            
+            btn.innerText = "Generating...";
+            btn.disabled = true;
+            
+            const includedEmployees = employeesData.filter(e => e.include);
+            if (includedEmployees.length === 0) return alert("Select at least one employee to pay.");
+
+            try {
+                const res = await fetch('/api/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ employees: includedEmployees })
+                });
+
+                const data = await res.json();
+                if (data.error) {
+                    alert("Error during generated: " + data.error);
+                    btn.innerText = "Generate Payslips";
+                    btn.disabled = false;
+                    return;
+                }
+                currentLinks = data.links || [];
+                
+                document.getElementById('table-panel').classList.add('hidden');
+                document.getElementById('results-panel').classList.remove('hidden');
+            } catch (error) {
+                alert("Network or Server error: " + error);
+            } finally {
+                btn.innerText = "Generate Payslips";
+                btn.disabled = false;
+            }
+
+            const container = document.getElementById('links-container');
+            container.innerHTML = '';
+            
+            const eftBody = document.querySelector('#eft-table tbody');
+            eftBody.innerHTML = '';
+            let totalEft = 0;
+
+            currentLinks.forEach(link => {
+                const div = document.createElement('div');
+                div.style.padding = '15px';
+                div.style.background = 'rgba(0,0,0,0.2)';
+                div.style.border = '1px solid rgba(255,255,255,0.1)';
+                div.style.borderRadius = '8px';
+
+                let waUrl = '';
+                if (link.phone && link.phone.length > 5) {
+                    waUrl = `whatsapp://send?phone=${link.phone}&text=${encodeURIComponent(link.wa_message)}`;
+                } else {
+                    waUrl = `whatsapp://send?text=${encodeURIComponent(link.wa_message)}`;
+                }
+                
+                div.innerHTML = `
+                    <div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 8px;">${link.name} ${link.phone ? '(' + link.phone + ')' : ''}</div>
+                    <div style="display:flex; gap:10px; align-items:center;">
+                        <a href="${link.url}" target="_blank" class="pdf-link">📄 View PDF</a>
+                        <button onclick="printFile('${link.url}')" style="background:#64748b; color:white; border:none; padding:5px 12px; border-radius:6px; cursor:pointer; font-size:0.9rem;">🖨️ Print</button>
+                        <button onclick="sendManualWA('${waUrl}', '${link.url}', this)" style="background:#128c7e; color:white; border:none; padding:5px 12px; border-radius:6px; cursor:pointer; font-size:0.9rem; border-radius:6px; text-decoration:none;">💬 WhatsApp (Manual)</button>
+                    </div>
+                `;
+                container.appendChild(div);
+                
+                // Add to EFT table
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td style="padding: 10px; border-bottom: 1px solid rgba(255,255,255,0.05);">${link.name}</td>
+                    <td style="padding: 10px; border-bottom: 1px solid rgba(255,255,255,0.05); text-align: right; font-weight: 600;">R ${(link.net || 0).toFixed(2)}</td>
+                `;
+                eftBody.appendChild(tr);
+                totalEft += (link.net || 0);
+            });
+            
+            // Add EFT total row
+            const trTotal = document.createElement('tr');
+            trTotal.innerHTML = `
+                <td style="padding: 10px; font-weight: 800; color: #60a5fa;">TOTAL PAYOUT</td>
+                <td style="padding: 10px; text-align: right; font-weight: 800; font-size: 1.2rem; color: #60a5fa;">R ${totalEft.toFixed(2)}</td>
+            `;
+            eftBody.appendChild(trTotal);
+        });
+        document.getElementById('btn-ai-send').addEventListener('click', sendAiMessage);
+        document.getElementById('ai-input').addEventListener('keypress', (e) => {
+            if(e.key === 'Enter') sendAiMessage();
+        });
+
+        async function sendAiMessage() {
+            const input = document.getElementById('ai-input');
+            const msg = input.value.trim();
+            if(!msg) return;
+
+            const chatWin = document.getElementById('ai-chat-window');
+            
+            // Add user bubble
+            const uDiv = document.createElement('div');
+            uDiv.style.alignSelf = 'flex-end';
+            uDiv.style.background = 'var(--accent)';
+            uDiv.style.padding = '12px 16px';
+            uDiv.style.borderRadius = '12px 12px 2px 12px';
+            uDiv.style.maxWidth = '80%';
+            uDiv.style.color = 'white';
+            uDiv.innerText = msg;
+            chatWin.appendChild(uDiv);
+            input.value = '';
+            chatWin.scrollTop = chatWin.scrollHeight;
+
+            // Show typing
+            const tDiv = document.createElement('div');
+            tDiv.style.alignSelf = 'flex-start';
+            tDiv.style.background = 'rgba(255,255,255,0.05)';
+            tDiv.style.padding = '12px 16px';
+            tDiv.style.borderRadius = '12px';
+            tDiv.innerText = 'Searching context & thinking...';
+            chatWin.appendChild(tDiv);
+
+            const res = await fetch('/api/ai/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: msg })
+            });
+            const data = await res.json();
+
+            chatWin.removeChild(tDiv);
+
+            if(data.error === 'API_KEY_MISSING') {
+                document.getElementById('api-key-panel').style.display = 'block';
+                return;
+            }
+
+            const rDiv = document.createElement('div');
+            rDiv.style.alignSelf = 'flex-start';
+            rDiv.style.background = 'rgba(255,255,255,0.05)';
+            rDiv.style.padding = '12px 16px';
+            rDiv.style.borderRadius = '12px 12px 12px 2px';
+            rDiv.style.maxWidth = '80%';
+            rDiv.style.color = '#cbd5e1';
+            rDiv.style.whiteSpace = 'pre-wrap';
+            rDiv.innerText = data.reply || data.error || 'Sorry, I hit a snag.';
+            chatWin.appendChild(rDiv);
+            chatWin.scrollTop = chatWin.scrollHeight;
+        }
+
+        window.saveApiKey = async () => {
+            const key = document.getElementById('input-api-key').value.trim();
+            if(!key) return alert("Please enter an API Key.");
+            
+            const res = await fetch('/api/save_config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ GEMINI_API_KEY: key })
+            });
+            const data = await res.json();
+            if(data.success) {
+                alert("API Key saved! Please restart the app for it to take effect.");
+                location.reload();
+            }
+        };
+        async function shareRosterImage() {
+            const area = document.getElementById('roster-capture-area');
+            const canvas = await html2canvas(area, { backgroundColor: '#0f172a' });
+            const base64 = canvas.toDataURL('image/png');
+            
+            const phone = prompt("Enter manager/group phone number to send to (optional):", "");
+            
+            const res = await fetch('/api/send_roster_image', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ image: base64, phone: phone })
+            });
+            const data = await res.json();
+            if(data.success) alert("📸 Roster image sent to WhatsApp successfully!");
+            else alert("Error: " + data.error);
+        }
+
+        function resetPayroll() {
+            if(confirm("Are you sure you want to clear current payroll data and start over?")) {
+                employeesData = [];
+                document.getElementById('table-panel').classList.add('hidden');
+                document.getElementById('results-panel').classList.add('hidden');
+                document.getElementById('upload-panel').classList.remove('hidden');
+            }
+        }
+    </script>
+</body>
+</html>

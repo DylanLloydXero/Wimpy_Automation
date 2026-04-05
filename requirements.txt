@@ -1,0 +1,9 @@
+pandas
+openpyxl
+fpdf2
+uvicorn
+fastapi
+pyqt6
+pyqt6-webengine
+pyngrok
+google-generativeai

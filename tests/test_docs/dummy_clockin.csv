@@ -1,0 +1,5 @@
+Employee Name,Date,Clock In Time,Clock Out Time,Approved Overtime
+Alice,2026-04-01,08:45,17:15,No
+Bob,2026-04-01,10:15,15:00,No
+Alice,2026-04-05,09:00,18:00,Yes
+Charlie,2026-04-01,21:50,06:30,No
