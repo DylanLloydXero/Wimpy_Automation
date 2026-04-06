@@ -8,6 +8,7 @@ from .api import app as fastapi_app
 
 from PyQt6.QtWidgets import QApplication, QMainWindow, QSplashScreen, QLabel, QVBoxLayout, QWidget, QStatusBar
 from PyQt6.QtWebEngineWidgets import QWebEngineView
+from PyQt6.QtWebEngineCore import QWebEngineSettings
 from PyQt6.QtCore import QUrl, QTimer, Qt, QFileInfo
 from PyQt6.QtGui import QIcon, QColor, QPixmap, QFont
 import webbrowser
@@ -91,67 +92,83 @@ class CustomWebEngineView(QWebEngineView):
             view.deleteLater()
 
 
+import os
+
 def launch_window():
     global _window, _splash
-
-    # Wait for server
-    wait_for_server()
-
-    _window = WimpyWindow()
-
-    # Embed the browser with custom link handler
-    browser = CustomWebEngineView()
-    browser.setUrl(QUrl("http://127.0.0.1:8000"))
-    
-    from PyQt6.QtWidgets import QFileDialog
-    def handle_download(download_item):
-        try:
-            # We must use a safe name
-            suggested = download_item.suggestedFileName() or "download"
-            path, _ = QFileDialog.getSaveFileName(_window, "Save File", suggested)
-            if path:
-                # In PyQt6, we must set Directory and Name separately (setPath is gone)
-                info = QFileInfo(path)
-                download_item.setDownloadDirectory(info.absolutePath())
-                download_item.setDownloadFileName(info.fileName())
-                download_item.accept()
-            else:
-                download_item.cancel()
-        except Exception as e:
-            print(f"Download Error: {e}")
-
-    def handle_print_request(frame):
-        from PyQt6.QtPrintSupport import QPrinter, QPrintDialog
-        printer = QPrinter(QPrinter.PrinterMode.HighResolution)
-        dialog = QPrintDialog(printer, _window)
-        if dialog.exec() == QPrintDialog.DialogCode.Accepted:
-            frame.print(printer)
-
-    browser.page().printRequested.connect(handle_print_request)
-    browser.page().profile().downloadRequested.connect(handle_download)
-    _window.setCentralWidget(browser)
-
-    # Status bar showing LAN info (Remote disabled)
-    status = QStatusBar()
-    _window.setStatusBar(status)
-
     try:
-        lan_ip = socket.gethostbyname(socket.gethostname())
-        lan_text = f"  💻 Local Network Access: http://{lan_ip}:8000"
-    except Exception:
-        lan_text = "  💻 Local Access: http://127.0.0.1:8000"
+        # Wait for server
+        wait_for_server()
 
-    status.showMessage(f"{lan_text}     (Open this URL on other phones/computers in the same building)")
+        _window = WimpyWindow()
 
-    # Center on screen
-    screen = QApplication.primaryScreen().geometry()
-    x = (screen.width() - _window.width()) // 2
-    y = (screen.height() - _window.height()) // 2
-    _window.move(x, y)
+        # Embed the browser with custom link handler
+        browser = CustomWebEngineView()
+        browser.setUrl(QUrl("http://127.0.0.1:8000"))
+        
+        from PyQt6.QtWidgets import QFileDialog
+        def handle_download(download_item):
+            try:
+                # We must use a safe name
+                suggested = download_item.suggestedFileName() or "download"
+                path, _ = QFileDialog.getSaveFileName(_window, "Save File", suggested)
+                if path:
+                    # In PyQt6, we must set Directory and Name separately (setPath is gone)
+                    info = QFileInfo(path)
+                    download_item.setDownloadDirectory(info.absolutePath())
+                    download_item.setDownloadFileName(info.fileName())
+                    download_item.accept()
+                else:
+                    download_item.cancel()
+            except Exception as e:
+                print(f"Download Error: {e}")
 
-    _window.show()
-    if _splash:
-        _splash.finish(_window)
+        def handle_print_request(frame):
+            from PyQt6.QtPrintSupport import QPrinter, QPrintDialog
+            printer = QPrinter(QPrinter.PrinterMode.HighResolution)
+            dialog = QPrintDialog(printer, _window)
+            if dialog.exec() == QPrintDialog.DialogCode.Accepted:
+                frame.print(printer)
+
+        browser.page().printRequested.connect(handle_print_request)
+        browser.page().profile().downloadRequested.connect(handle_download)
+        
+        # Allow JS window.close() to shut down the app (Safe check)
+        try:
+            browser.settings().setAttribute(QWebEngineSettings.WebAttribute.JavascriptCanCloseWindows, True)
+            browser.page().windowCloseRequested.connect(_window.close)
+        except Exception as se:
+            print(f"Settings Error: {se}")
+        
+        _window.setCentralWidget(browser)
+
+        # Status bar showing LAN info (Remote disabled)
+        status = QStatusBar()
+        _window.setStatusBar(status)
+
+        try:
+            lan_ip = socket.gethostbyname(socket.gethostname())
+            lan_text = f"  💻 Local Network Access: http://{lan_ip}:8000"
+        except Exception:
+            lan_text = "  💻 Local Access: http://127.0.0.1:8000"
+
+        status.showMessage(f"{lan_text}     (Open this URL on other phones/computers in the same building)")
+
+        # Center on screen
+        screen = QApplication.primaryScreen().geometry()
+        x = (screen.width() - _window.width()) // 2
+        y = (screen.height() - _window.height()) // 2
+        _window.move(x, y)
+
+        # Start maximized (Safer than full screen on some setups)
+        _window.showMaximized()
+        if _splash:
+            _splash.finish(_window)
+    except Exception as ge:
+        print(f"Global Launch Error: {ge}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
 
 
 def main():

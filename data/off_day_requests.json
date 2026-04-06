@@ -1,0 +1,102 @@
+[
+    {
+        "id": "1775475760.718244",
+        "employee": "Charnick Botha",
+        "off_days": [
+            "2026-05-20"
+        ],
+        "type": "OFF_DAY",
+        "status": "APPROVED",
+        "timestamp": "2026-04-06 13:42"
+    },
+    {
+        "id": "1775475760.824819",
+        "employee": "Charnick Botha",
+        "off_days": [
+            "2026-05-23"
+        ],
+        "type": "OFF_DAY",
+        "status": "APPROVED",
+        "timestamp": "2026-04-06 13:42"
+    },
+    {
+        "id": "1775475954.884378",
+        "employee": "Charnick Botha",
+        "off_days": [
+            "2026-05-20"
+        ],
+        "type": "OFF_DAY",
+        "status": "APPROVED",
+        "timestamp": "2026-04-06 13:45"
+    },
+    {
+        "id": "1775475954.88745",
+        "employee": "Charnick Botha",
+        "off_days": [
+            "2026-05-23"
+        ],
+        "type": "OFF_DAY",
+        "status": "APPROVED",
+        "timestamp": "2026-04-06 13:45"
+    },
+    {
+        "id": "1775475963.883211",
+        "employee": "Charnick Botha",
+        "off_days": [
+            "2026-05-20"
+        ],
+        "type": "OFF_DAY",
+        "status": "APPROVED",
+        "timestamp": "2026-04-06 13:46"
+    },
+    {
+        "id": "1775475963.890902",
+        "employee": "Charnick Botha",
+        "off_days": [
+            "2026-05-23"
+        ],
+        "type": "OFF_DAY",
+        "status": "APPROVED",
+        "timestamp": "2026-04-06 13:46"
+    },
+    {
+        "id": "1775476018.159403",
+        "employee": "Charnick Botha",
+        "off_days": [
+            "2026-05-20"
+        ],
+        "type": "OFF_DAY",
+        "status": "APPROVED",
+        "timestamp": "2026-04-06 13:46"
+    },
+    {
+        "id": "1775476018.294445",
+        "employee": "Charnick Botha",
+        "off_days": [
+            "2026-05-23"
+        ],
+        "type": "OFF_DAY",
+        "status": "APPROVED",
+        "timestamp": "2026-04-06 13:46"
+    },
+    {
+        "id": "1775476093.386162",
+        "employee": "Charnick Botha",
+        "off_days": [
+            "2026-05-20"
+        ],
+        "type": "OFF_DAY",
+        "status": "APPROVED",
+        "timestamp": "2026-04-06 13:48"
+    },
+    {
+        "id": "1775476093.388774",
+        "employee": "Charnick Botha",
+        "off_days": [
+            "2026-05-23"
+        ],
+        "type": "OFF_DAY",
+        "status": "APPROVED",
+        "timestamp": "2026-04-06 13:48"
+    }
+]

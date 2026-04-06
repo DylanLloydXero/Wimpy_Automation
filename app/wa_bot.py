@@ -5,6 +5,7 @@ import urllib.parse
 import webbrowser
 import pyautogui
 import win32clipboard
+import win32gui
 
 def copy_files_to_clipboard(filepaths):
     """Copies file paths to the Windows clipboard as a 'File Drop' (CF_HDROP)."""
@@ -20,9 +21,35 @@ def copy_files_to_clipboard(filepaths):
         except Exception as e:
             time.sleep(0.2)
 
+def check_whatsapp_ready():
+    """Checks if the WhatsApp Desktop window is open and gives it focus."""
+    def callback(hwnd, windows):
+        if win32gui.IsWindowVisible(hwnd):
+            title = win32gui.GetWindowText(hwnd).lower()
+            if "whatsapp" in title:
+                windows.append(hwnd)
+    
+    windows = []
+    win32gui.EnumWindows(callback, windows)
+    
+    if not windows:
+        return False, "WhatsApp Desktop is not open. Please open it first."
+    
+    try:
+        win32gui.SetForegroundWindow(windows[0])
+        time.sleep(1)
+        return True, "WhatsApp is ready."
+    except Exception as e:
+        return False, f"Could not focus WhatsApp: {e}"
+
 def start_bot(payload_path):
     if not os.path.exists(payload_path):
         print(f"Payload not found: {payload_path}")
+        return
+
+    ready, msg = check_whatsapp_ready()
+    if not ready:
+        pyautogui.alert(msg, "WhatsApp Bot Error")
         return
 
     with open(payload_path, 'r') as f:
@@ -34,7 +61,6 @@ def start_bot(payload_path):
 
     for item in data:
         phone = item.get('phone', '')
-        # Remove any non-digits if necessary, but protocol usually needs digits
         phone = ''.join(filter(str.isdigit, phone))
         msg = item.get('message', '')
         filepath = item.get('file', '')
@@ -44,38 +70,23 @@ def start_bot(payload_path):
             continue
             
         print(f"Targeting: {phone}")
-        
-        # 1. Open the Desktop App via protocol
-        # We don't include text in URL to avoid URL length issues and focus on the paste
         url = f"whatsapp://send?phone={phone}"
         webbrowser.open(url)
-        
-        # 2. Wait for App to focus and Load chat
-        # Usually 3-4 seconds is safe for the desktop app to switch chats
         time.sleep(4)
         
-        # 3. Handle File Attachment (PDF)
         if filepath and os.path.exists(filepath):
             print(f"Attaching: {filepath}")
             copy_files_to_clipboard([filepath])
             time.sleep(0.5)
             pyautogui.hotkey('ctrl', 'v')
-            time.sleep(1.5) # Wait for preview to appear
+            time.sleep(1.5) 
             
-        # 4. Type/Paste Message
         if msg:
-            # We use typewrite or paste. Typewrite is safer for emojis/formatting sometimes
-            # But pasting is faster for long messages.
-            # Let's just type it if it's short, or assume it's in the text box if we used text in URL
-            # Since we didn't use text in URL, we type it now.
             pyautogui.write(msg)
             time.sleep(0.5)
             
-        # 5. Send
         pyautogui.press('enter')
         print(f"Sent to {phone}")
-        
-        # Wait between people to avoid spam blocks and let UI catch up
         time.sleep(2)
 
     print("--- ALL MESSAGES SENT ---")

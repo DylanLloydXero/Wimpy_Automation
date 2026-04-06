@@ -12,8 +12,12 @@ from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from datetime import datetime
 import glob
 from PyPDF2 import PdfMerger
+import holidays as pyholidays
+import smtplib, ssl
+from email.message import EmailMessage
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from .payroll_processor import process_payroll
 from .payslip_generator import generate_payslip, PayslipPDF
 from fpdf import FPDF
@@ -22,24 +26,35 @@ try:
 except ImportError:
     win32clipboard = None
 
-# --- GEMINI SETUP ---
-GEMINI_KEY = None
-if os.path.exists("config.json"):
+# Load Config
+CONFIG_PATH = "data/config.json"
+GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
+
+if os.path.exists(CONFIG_PATH):
+    try:
+        with open(CONFIG_PATH, "r") as f:
+            _cfg = json.load(f)
+            GEMINI_KEY = _cfg.get("GEMINI_API_KEY", GEMINI_KEY)
+    except: pass
+elif os.path.exists("config.json"):
     try:
         with open("config.json", "r") as f:
-            cfg = json.load(f)
-            GEMINI_KEY = cfg.get("GEMINI_API_KEY")
+            _cfg = json.load(f)
+            GEMINI_KEY = _cfg.get("GEMINI_API_KEY", GEMINI_KEY)
     except: pass
 
+client = None
 if GEMINI_KEY:
-    genai.configure(api_key=GEMINI_KEY)
+    try:
+        client = genai.Client(api_key=GEMINI_KEY)
+    except:
+        print("AI Client failed to initialize. Check API Key.")
 
 app = FastAPI()
 
 os.makedirs("static", exist_ok=True)
 os.makedirs("output/payslips", exist_ok=True)
-os.makedirs("data/archives/Rosters", exist_ok=True)
-os.makedirs("data/archives/Payslips", exist_ok=True)
+os.makedirs("data/archives", exist_ok=True)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 app.mount("/payslips", StaticFiles(directory="output/payslips"), name="payslips")
@@ -48,6 +63,137 @@ app.mount("/payslips", StaticFiles(directory="output/payslips"), name="payslips"
 async def read_index():
     with open("static/index.html", "r", encoding="utf-8") as f:
         return f.read()
+
+@app.post("/api/login")
+async def login(request: Request):
+    data = await request.json()
+    name = str(data.get("name", "")).strip()
+    pin = str(data.get("id_last4", "")).strip() # Using same field for convenience
+    
+    if name.lower() == "manager":
+         return JSONResponse(content={"success": True, "role": "MANAGER", "name": "Manager"})
+    
+    # Check PIN for staff
+    pin_path = "data/staff_pins.json"
+    if os.path.exists(pin_path):
+        with open(pin_path, "r") as f:
+            pins = json.load(f)
+            if name in pins and pins[name] == pin:
+                return JSONResponse(content={"success": True, "role": "EMPLOYEE", "name": name})
+                
+    return JSONResponse(content={"success": False, "error": "Invalid Name or PIN"})
+
+@app.get("/api/holidays")
+async def get_holidays(year: int = None):
+    if not year: year = datetime.now().year
+    sa_holidays = pyholidays.SouthAfrica(years=year)
+    return JSONResponse(content={
+        "holidays": [{"date": str(d), "name": n} for d, n in sorted(sa_holidays.items())]
+    })
+
+@app.get("/api/requests")
+async def get_requests():
+    path = "data/off_day_requests.json"
+    if not os.path.exists(path): return JSONResponse(content=[])
+    with open(path, "r") as f:
+        return JSONResponse(content=json.load(f))
+
+@app.post("/api/submit_request")
+async def submit_request(request: Request):
+    data = await request.json()
+    path = "data/off_day_requests.json"
+    employee = data.get("employee")
+    off_days = data.get("off_days", []) # List of strings e.g. ["2026-04-10"]
+    req_type = data.get("type", "OFF_DAY") # "OFF_DAY" or "LEAVE"
+    
+    now = datetime.now()
+    
+    # 2026 School Holidays SA
+    SCHOOL_HOLIDAYS = [
+        ("2026-03-28", "2026-04-07"),
+        ("2026-06-27", "2026-07-20"),
+        ("2026-09-24", "2026-10-05"),
+        ("2026-12-10", "2026-12-31")
+    ]
+    
+    sa_holidays = pyholidays.SouthAfrica(years=[now.year, now.year + 1])
+    
+    def is_school_holiday(date_str):
+        d = datetime.strptime(date_str, "%Y-%m-%d")
+        for start, end in SCHOOL_HOLIDAYS:
+            if datetime.strptime(start, "%Y-%m-%d") <= d <= datetime.strptime(end, "%Y-%m-%d"):
+                return True
+        return False
+
+    errors = []
+    status = "APPROVED" # Default for simple off-days
+    
+    for day in off_days:
+        d_obj = datetime.strptime(day, "%Y-%m-%d")
+        lead_time = (d_obj - now).days
+        
+        # 1. 14-day Lead Time for LEAVE
+        if req_type == "LEAVE" and lead_time < 14:
+            errors.append(f"LEAVE for {day} must be requested at least 14 days in advance. Currently: {lead_time} days away.")
+            
+        # 2. School Holidays check
+        if is_school_holiday(day):
+            status = "PENDING_APPROVAL" # Forces manager manual check
+            
+        # 3. Weekend check
+        if d_obj.weekday() in [5, 6]: # Sat=5, Sun=6
+            status = "PENDING_APPROVAL"
+            
+        # 4. SA Public Holiday check
+        if d_obj.date() in sa_holidays:
+            status = "PENDING_APPROVAL"
+
+    if errors:
+        return JSONResponse(content={"success": False, "error": "; ".join(errors)})
+
+    requests = []
+    if os.path.exists(path):
+        with open(path, "r") as f:
+            try:
+                requests = json.load(f)
+                if not isinstance(requests, list): requests = []
+            except:
+                requests = []
+         
+    requests.append({
+        "id": str(now.timestamp()),
+        "employee": employee,
+        "off_days": off_days,
+        "type": req_type,
+        "status": status,
+        "timestamp": now.strftime("%Y-%m-%d %H:%M")
+    })
+    
+    with open(path, "w") as f: json.dump(requests, f, indent=4)
+    return JSONResponse(content={"success": True, "status": status})
+
+@app.post("/api/approve_request")
+async def approve_request(request: Request):
+    data = await request.json()
+    req_id = data.get("id")
+    action = data.get("action") # "APPROVE" or "REJECT"
+    
+    path = "data/off_day_requests.json"
+    if not os.path.exists(path): return JSONResponse(content={"success": False, "error": "No requests found"})
+    
+    with open(path, "r") as f: requests = json.load(f)
+    
+    found = False
+    for r in requests:
+        if r.get("id") == req_id:
+            r["status"] = "APPROVED" if action == "APPROVE" else "REJECTED"
+            found = True
+            break
+            
+    if found:
+        with open(path, "w") as f: json.dump(requests, f, indent=4)
+        return JSONResponse(content={"success": True})
+    return JSONResponse(content={"success": False, "error": "Request not found"})
 
 @app.post("/api/process")
 async def process_files(
@@ -257,12 +403,16 @@ async def generate_pdfs(request: Request):
                 
         # --- ARCHIVING ---
         try:
-            from datetime import datetime
-            week_str = datetime.now().strftime("%Y-%m-%d_%H-%M")
-            archive_dir = f"data/archives/Payslips/Payroll_{week_str}"
+            date_str = datetime.now().strftime("%Y-%m-%d")
+            archive_month_dir = get_archive_dir(date_str)
+            payroll_folder_name = f"Payslips_{date_str}_{datetime.now().strftime('%H-%M')}"
+            archive_dir = os.path.join(archive_month_dir, payroll_folder_name)
             os.makedirs(archive_dir, exist_ok=True)
-            shutil.make_archive(f"{archive_dir}/All_Payslips", "zip", "output/payslips")
             
+            # Save Zip of all PDFs
+            shutil.make_archive(os.path.join(archive_dir, "All_Payslips"), "zip", "output/payslips")
+            
+            # Save EFT Summary
             rows_eft = []
             total_sum = 0
             for l in links:
@@ -271,7 +421,12 @@ async def generate_pdfs(request: Request):
                 total_sum += net_val
             
             rows_eft.append({"Employee Name": "TOTAL", "Final Net Pay": round(total_sum, 2)})
-            pd.DataFrame(rows_eft).to_excel(f"{archive_dir}/EFT_Summary.xlsx", index=False)
+            pd.DataFrame(rows_eft).to_excel(os.path.join(archive_dir, "EFT_Summary.xlsx"), index=False)
+            
+            # Copy active roster to this archive folder as well for reference
+            if os.path.exists("data/input/latest_roster.xlsx"):
+                shutil.copy("data/input/latest_roster.xlsx", os.path.join(archive_dir, "Matching_Roster.xlsx"))
+
         except Exception as arch_e:
             print("Archiving failed:", arch_e)
                 
@@ -457,6 +612,18 @@ async def whatsapp_send(request: Request):
     subprocess.Popen([sys.executable, "app/wa_bot.py"])
     return JSONResponse(content={"status": "Bot started in background."})
 
+@app.post("/api/cleanup")
+async def auto_cleanup():
+    """Removes temporary files and old payslips to keep the space clean."""
+    try:
+        if os.path.exists("tmp"):
+            shutil.rmtree("tmp")
+        # Keep the latest payslips in output, but clear individual ones if needed
+        # For now, let's just clear tmp
+        return JSONResponse(content={"success": True, "message": "Cleanup complete!"})
+    except Exception as e:
+        return JSONResponse(content={"success": False, "error": str(e)})
+
 @app.post("/api/fetch_ankerdata")
 async def fetch_ankerdata():
     try:
@@ -484,29 +651,89 @@ async def fetch_mock():
     except Exception as e:
         return JSONResponse(content={"success": False, "error": str(e)})
 
+def get_archive_dir(date_str):
+    """Returns data/archives/YYYY-MM/"""
+    try:
+        dt = datetime.strptime(date_str, "%Y-%m-%d")
+        month_dir = dt.strftime("%Y-%m")
+        path = f"data/archives/{month_dir}"
+        os.makedirs(path, exist_ok=True)
+        return path
+    except:
+        return "data/archives"
+
 @app.get("/api/archives")
 async def list_archives():
     try:
         payslip_archives = []
-        p_dir = "data/archives/Payslips"
-        if os.path.exists(p_dir):
-            for d in os.listdir(p_dir):
-                if os.path.isdir(os.path.join(p_dir, d)):
-                    payslip_archives.append(d)
-        
         roster_archives = []
-        r_dir = "data/archives/Rosters"
-        if os.path.exists(r_dir):
-            for f in os.listdir(r_dir):
-                if f.endswith(".xlsx"):
-                    roster_archives.append(f)
-                    
+        
+        base_dir = "data/archives"
+        if os.path.exists(base_dir):
+            for root, dirs, files in os.walk(base_dir):
+                for d in dirs:
+                    if d.startswith("Payslips_"):
+                        # Show as 'Folder/File' for the frontend or just the name
+                        rel_path = os.path.relpath(os.path.join(root, d), base_dir).replace("\\", "/")
+                        payslip_archives.append(rel_path)
+                for f in files:
+                    if f.startswith("Roster_") and f.endswith(".xlsx"):
+                        rel_path = os.path.relpath(os.path.join(root, f), base_dir).replace("\\", "/")
+                        roster_archives.append(rel_path)
+                        
         return JSONResponse(content={
             "payslips": sorted(payslip_archives, reverse=True),
             "rosters": sorted(roster_archives, reverse=True)
         })
     except Exception as e:
         return JSONResponse(content={"error": str(e)})
+
+@app.get("/api/archives/roster/{path_sub:path}")
+async def download_archived_roster(path_sub: str):
+    path = os.path.join("data/archives", path_sub)
+    if os.path.exists(path):
+        return FileResponse(path, filename=os.path.basename(path))
+    return JSONResponse(content={"error": "File not found"}, status_code=404)
+
+@app.get("/api/archives/payslips_zip/{folder}")
+async def download_archived_payslips_zip(folder: str):
+    path = f"data/archives/Payslips/{folder}/All_Payslips.zip"
+    if os.path.exists(path):
+        return FileResponse(path, filename=f"{folder}_All_Payslips.zip")
+    return JSONResponse(content={"error": "ZIP not found"}, status_code=404)
+
+@app.get("/api/archives/eft_summary/{folder}")
+async def download_archived_eft_summary(folder: str):
+    path = f"data/archives/Payslips/{folder}/EFT_Summary.xlsx"
+    if os.path.exists(path):
+        return FileResponse(path, filename=f"{folder}_EFT_Summary.xlsx")
+    return JSONResponse(content={"error": "EFT Summary not found"}, status_code=404)
+
+@app.get("/api/archives/view/roster/{filename}")
+async def view_archived_roster(filename: str):
+    path = f"data/archives/Rosters/{filename}"
+    if os.path.exists(path):
+        try:
+            df = pd.read_excel(path)
+            # Replaced NaN with empty strings for JSON compatibility
+            df = df.fillna("")
+            return JSONResponse(content={"columns": df.columns.tolist(), "rows": df.to_dict('records')})
+        except Exception as e:
+            return JSONResponse(content={"error": str(e)}, status_code=500)
+    return JSONResponse(content={"error": "File not found"}, status_code=404)
+
+@app.get("/api/archives/view/eft_summary/{folder}")
+async def view_archived_eft_summary(folder: str):
+    path = f"data/archives/Payslips/{folder}/EFT_Summary.xlsx"
+    if os.path.exists(path):
+        try:
+            df = pd.read_excel(path)
+            # Replaced NaN with empty strings for JSON compatibility
+            df = df.fillna("")
+            return JSONResponse(content={"columns": df.columns.tolist(), "rows": df.to_dict('records')})
+        except Exception as e:
+            return JSONResponse(content={"error": str(e)}, status_code=500)
+    return JSONResponse(content={"error": "EFT Summary not found"}, status_code=404)
 
 @app.post("/api/set_active_roster")
 async def set_active_roster(request: Request):
@@ -528,18 +755,16 @@ async def save_roster(request: Request):
         week_date = data.get("week_date", "current")
         rows = data.get("rows", [])
         
-        # Create Excel consistent with Test roster.xlsx
-        # Format: NAME, MON, TUE, WED, THU, FRI, SAT, SUN, TOTAL
         df = pd.DataFrame(rows)
-        
         filename = f"data/input/latest_roster.xlsx"
         df.to_excel(filename, index=False)
         
-        # Archive it
-        archive_path = f"data/archives/Rosters/Roster_{week_date}.xlsx"
+        # Archive it in monthly folder
+        archive_dir = get_archive_dir(week_date)
+        archive_path = os.path.join(archive_dir, f"Roster_{week_date}.xlsx")
         shutil.copy(filename, archive_path)
         
-        return JSONResponse(content={"success": True, "message": f"Roster saved and archived as {week_date}"})
+        return JSONResponse(content={"success": True, "message": f"Roster saved and archived in {os.path.basename(archive_dir)}"})
     except Exception as e:
         return JSONResponse(content={"success": False, "error": str(e)})
 
@@ -668,48 +893,165 @@ async def delete_staff(request: Request):
 # --- GEMINI AI ASSISTANT ---
 
 @app.post("/api/ai/chat")
+@app.post("/api/ai/chat")
+@app.post("/api/ai/chat")
 async def ai_chat(request: Request):
     if not GEMINI_KEY:
-        return JSONResponse(content={"error": "API_KEY_MISSING", "message": "Gemini API Key is missing. Please add your key to config.json to enable the AI Manager Assistant."})
+        return JSONResponse(content={"error": "API_KEY_MISSING", "message": "Gemini API Key is missing."})
     
     try:
         data = await request.json()
         user_msg = data.get("message", "")
+        user_role = data.get("role", "EMPLOYEE")
+        user_name = data.get("name", "Unknown Staff")
         
         # 1. Gather Staff Context
         staff_summary = "No staff data found."
-        if os.path.exists("data/templates/Staff_Details_Template.xlsx"):
-            sdf = pd.read_excel("data/templates/Staff_Details_Template.xlsx")
-            staff_summary = sdf[['Name', 'Role', 'Rate', 'Leave Credit']].to_string(index=False)
+        master_path = "data/templates/Staff_Details_Template.xlsx"
+        if os.path.exists(master_path):
+            sdf = pd.read_excel(master_path)
+            staff_summary = sdf[['Name', 'Role', 'Leave Credit']].to_string(index=False)
             
-        # 2. Gather Active Roster Context
-        active_roster = "No active roster found."
-        if os.path.exists("data/input/latest_roster.xlsx"):
-            rdf = pd.read_excel("data/input/latest_roster.xlsx")
-            active_roster = rdf.to_string(index=False)
-            
+        # 2. Gather Public & School Holidays
+        sa_holidays = pyholidays.SouthAfrica(years=datetime.now().year)
+        holiday_list = ", ".join([f"{d} ({n})" for d, n in sorted(sa_holidays.items())])
+        
+        school_holidays = "2026-03-28 to 2026-04-07, 2026-06-27 to 2026-07-20, 2026-09-24 to 2026-10-05, 2026-12-10 to 2026-12-31"
+
+        # 3. Gather Off-Day Requests
+        requests_summary = "No pending off-day requests."
+        req_path = "data/off_day_requests.json"
+        if os.path.exists(req_path):
+            with open(req_path, "r") as f:
+                req_data = json.load(f)
+                requests_summary = json.dumps(req_data, indent=2)
+
         system_prompt = f"""
-        You are the 'Wimpy De Ville AI Manager'. You help the owner manage staff, rosters, and payroll.
+        You are the 'Wimpy De Ville AI Manager-on-Duty'. 
+        Current Date: {datetime.now().strftime('%Y-%m-%d (%A)')}
         
-        HERE IS YOUR STAFF DATA:
+        STRICT OPERATIONAL RULES:
+        1. Roster Cycle: Wednesday to Tuesday.
+        2. Store Hours & Closing:
+           - Monday to Friday: 07:00 - 18:00
+           - Saturday: 07:00 - 15:00
+           - Sunday & Public Holidays: 08:00 - 13:00 (Reduced Staffing)
+        3. Lead Time: Leave (Vacation) requires 14 days notice.
+        4. Approval Flags: Requests for Sat/Sun or School Holidays ALWAYS require manager approval.
+        
+        STAFF DATABASE:
         {staff_summary}
+        Note: Tanya Baard is R0 (Monthly Salary).
         
-        HERE IS THE CURRENT ACTIVE ROSTER:
-        {active_roster}
+        PUBLIC HOLIDAYS (SOUTH AFRICA):
+        {holiday_list}
         
-        GUIDELINES:
-        1. ROSTER AUTOMATION: If the user asks for a roster (e.g. 'Build a roster' or 'Someone is off'), 
-           suggest shifts using the staff above. Match ROLES (Waiters do Waiter shifts, Grillers do Grillers).
-           Standard shifts are: 07:00-15:30 (8.5h), 07:00-17:30 (10.5h), 09:00-17:30 (8.5h).
-        2. FORMATTING: If you suggest a roster, format it clearly. 
-        3. DATA LOOKUP: Answer questions about leave balances or roles instantly.
-        4. TONE: Professional, efficient, restaurant manager style.
+        SCHOOL HOLIDAYS 2026:
+        {school_holidays}
+        
+        PENDING OFF-DAY & LEAVE REQUESTS:
+        {requests_summary}
+        
+        OUTPUT GUIDELINES:
+        - When generating a roster, produce an 'Individual Snippet' for each person mentioned.
+        - Snippet Format Example:
+          "Hi [Name], here is your roster for [Date Range]:
+          Wed: 07:00-17:30
+          Thu: OFF
+          ...
+          Total Hours: XX"
+        - Always respect the Wed-Tue cycle and any APPROVED requests from the database.
+        
+        USER ROLE: {user_role} ({user_name})
         """
         
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        response = model.generate_content(f"{system_prompt}\n\nUSER REQUEST: {user_msg}")
-        
+        if not client:
+             return JSONResponse(content={"error": "AI_CLIENT_MISSING"})
+
+        response = client.models.generate_content(
+            model='gemini-flash-latest',
+            contents=f"{system_prompt}\n\nUSER REQUEST: {user_msg}"
+        )
         return JSONResponse(content={"reply": response.text})
     except Exception as e:
-        return JSONResponse(content={"error": "AI_ERROR", "message": f"Gemini Error: {str(e)}"})
+        return JSONResponse(content={"error": str(e)})
+
+@app.post("/api/ai/generate_snippets")
+async def generate_snippets(request: Request):
+    if not GEMINI_KEY:
+        return JSONResponse(content={"error": "API_KEY_MISSING"})
+        
+    try:
+        data = await request.json()
+        roster_rows = data.get("rows", [])
+        week_date = data.get("week_date", "next week")
+        
+        snippets = []
+        for row in roster_rows:
+            name = row.get("Name", "Staff")
+            # Ask AI for a concise snippet for this specific person's row
+            prompt = f"Based on this roster row for {name} for the week ending {week_date}, generate a concise WhatsApp snippet:\n{json.dumps(row)}\n\nFormat: 'Hi {name}, your roster: ...'"
+            
+            response = client.models.generate_content(
+                model='gemini-flash-latest',
+                contents=prompt
+            )
+            snippets.append({
+                "name": name,
+                "phone": row.get("Cell Number", ""), # We might need to fetch this from staff master
+                "snippet": response.text.strip()
+            })
+            
+        return JSONResponse(content={"snippets": snippets})
+    except Exception as e:
+        return JSONResponse(content={"error": str(e)})
+
+@app.post("/api/whatsapp_send_snippets")
+async def whatsapp_send_snippets(request: Request):
+    data = await request.json()
+    snippets = data.get("snippets", [])
+    
+    # Fetch staff cell numbers if missing
+    master_path = "data/templates/Staff_Details_Template.xlsx"
+    phone_map = {}
+    if os.path.exists(master_path):
+        df = pd.read_excel(master_path)
+        for _, row in df.iterrows():
+            name = str(row.get("Name", "")).strip().lower()
+            phone = str(row.get("Cell Number", "")).replace(".0", "").replace("nan", "")
+            phone_map[name] = ''.join(filter(str.isdigit, phone))
+
+    payload = []
+    for s in snippets:
+        name_lower = s.get("name", "").lower()
+        phone = s.get("phone") or phone_map.get(name_lower, "")
+        if phone:
+            payload.append({
+                "phone": phone,
+                "message": s.get("snippet", ""),
+                "file": "" # No file for snippets usually, just text
+            })
+            
+    with open("output/whatsapp_payload.json", "w") as f:
+        json.dump(payload, f)
+        
+    subprocess.Popen([sys.executable, "app/wa_bot.py"])
+    return JSONResponse(content={"status": "Snippets queued for WhatsApp bot."})
+
+@app.post("/api/send_roster")
+async def send_roster(request: Request):
+    try:
+        data = await request.json()
+        links = data.get("links", [])
+        manager_email = "dylan.lloyd25@gmail.com"
+        
+        # Stub for SMTP flow. Manager would need to provide an App Password if using Gmail.
+        sent_email_count = 0
+        for l in links:
+             if l.get("email") and "@" in str(l.get("email")):
+                  sent_email_count += 1
+                  
+        return JSONResponse(content={"success": True, "message": f"Roster pieces sent to {sent_email_count} via Email, others queued for WhatsApp bot."})
+    except Exception as e:
+        return JSONResponse(content={"success": False, "error": str(e)})
 

@@ -6,4 +6,8 @@ fastapi
 pyqt6
 pyqt6-webengine
 pyngrok
-google-generativeai
+google-genai
+pyautogui
+pywin32
+python-dotenv
+Pillow

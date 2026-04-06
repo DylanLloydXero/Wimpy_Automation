@@ -22,3 +22,6 @@ config.json
 .vscode/
 .idea/
 .gemini/
+
+# Logs
+*.log
