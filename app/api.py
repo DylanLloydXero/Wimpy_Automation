@@ -68,19 +68,34 @@ async def read_index():
 async def login(request: Request):
     data = await request.json()
     name = str(data.get("name", "")).strip()
-    pin = str(data.get("id_last4", "")).strip() # Using same field for convenience
-    
+    pin = str(data.get("id_last4", "")).strip()
+
+    # Manager bypass requires PIN 0000
     if name.lower() == "manager":
-         return JSONResponse(content={"success": True, "role": "MANAGER", "name": "Manager"})
-    
+        if pin == "0000":
+            return JSONResponse(content={"success": True, "role": "MANAGER", "name": "Manager"})
+        else:
+            return JSONResponse(content={"success": False, "error": "Invalid Manager PIN"})
+
     # Check PIN for staff
     pin_path = "data/staff_pins.json"
     if os.path.exists(pin_path):
         with open(pin_path, "r") as f:
             pins = json.load(f)
-            if name in pins and pins[name] == pin:
-                return JSONResponse(content={"success": True, "role": "EMPLOYEE", "name": name})
-                
+        if name in pins and pins[name] == pin:
+            # Check portal_access from master excel
+            master_path = "data/templates/Staff_Details_Template.xlsx"
+            role = "EMPLOYEE"
+            portal_access = "MY_SHIFTS"
+            if os.path.exists(master_path):
+                mdf = pd.read_excel(master_path)
+                row = mdf[mdf["Name"].astype(str).str.strip().str.lower() == name.lower()]
+                if not row.empty:
+                    portal_access = str(row.iloc[0].get("Portal Access", "MY_SHIFTS")).replace("nan", "MY_SHIFTS") if "Portal Access" in mdf.columns else "MY_SHIFTS"
+                    if portal_access == "MANAGER":
+                        role = "MANAGER"
+            return JSONResponse(content={"success": True, "role": role, "name": name, "portal_access": portal_access})
+
     return JSONResponse(content={"success": False, "error": "Invalid Name or PIN"})
 
 @app.get("/api/holidays")
@@ -126,41 +141,33 @@ async def submit_request(request: Request):
         return False
 
     errors = []
-    status = "APPROVED" # Default for simple off-days
-    
+    status = "APPROVED"  # Default
+
     for day in off_days:
         d_obj = datetime.strptime(day, "%Y-%m-%d")
         lead_time = (d_obj - now).days
-        
-        # 1. 14-day Lead Time for LEAVE
+
+        # 1. 14-day lead time for LEAVE only
         if req_type == "LEAVE" and lead_time < 14:
-            errors.append(f"LEAVE for {day} must be requested at least 14 days in advance. Currently: {lead_time} days away.")
-            
-        # 2. School Holidays check
-        if is_school_holiday(day):
-            status = "PENDING_APPROVAL" # Forces manager manual check
-            
-        # 3. Weekend check
-        if d_obj.weekday() in [5, 6]: # Sat=5, Sun=6
-            status = "PENDING_APPROVAL"
-            
-        # 4. SA Public Holiday check
-        if d_obj.date() in sa_holidays:
+            errors.append(f"LEAVE for {day} must be requested at least 14 days in advance. Currently only {lead_time} days away.")
+
+        # 2. Only Saturday (5) and Sunday (6) require manager approval for OFF_DAY
+        if d_obj.weekday() in [5, 6]:
             status = "PENDING_APPROVAL"
 
     if errors:
         return JSONResponse(content={"success": False, "error": "; ".join(errors)})
 
-    requests = []
+    reqs = []
     if os.path.exists(path):
         with open(path, "r") as f:
             try:
-                requests = json.load(f)
-                if not isinstance(requests, list): requests = []
+                reqs = json.load(f)
+                if not isinstance(reqs, list): reqs = []
             except:
-                requests = []
-         
-    requests.append({
+                reqs = []
+
+    reqs.append({
         "id": str(now.timestamp()),
         "employee": employee,
         "off_days": off_days,
@@ -168,8 +175,8 @@ async def submit_request(request: Request):
         "status": status,
         "timestamp": now.strftime("%Y-%m-%d %H:%M")
     })
-    
-    with open(path, "w") as f: json.dump(requests, f, indent=4)
+
+    with open(path, "w") as f: json.dump(reqs, f, indent=4)
     return JSONResponse(content={"success": True, "status": status})
 
 @app.post("/api/approve_request")
@@ -241,7 +248,7 @@ async def process_files(
         except Exception as e:
             print("Could not parse master list:", e)
 
-    output_df, summary_df = process_payroll(roster_path, clockin_path, output_format='dataframe')
+    output_df, summary_df, overtime_flags = process_payroll(roster_path, clockin_path, output_format='dataframe')
     
     employees = []
     if summary_df is not None and not summary_df.empty:
@@ -293,7 +300,35 @@ async def process_files(
                 **m_details
             })
 
-    return JSONResponse(content={"employees": employees})
+    return JSONResponse(content={"employees": employees, "overtime_flags": overtime_flags})
+
+@app.post("/api/approve_overtime")
+async def approve_overtime(request: Request):
+    """Saves overtime decisions (APPROVED or DENIED) to data/overtime_approvals.json"""
+    try:
+        data = await request.json()
+        employee = data.get("employee")
+        date_str = data.get("date")
+        status = data.get("status")
+        
+        if not employee or not date_str or not status:
+            return JSONResponse(content={"success": False, "error": "Missing mapping detail."})
+            
+        path = "data/overtime_approvals.json"
+        approvals = {}
+        if os.path.exists(path):
+            with open(path, "r") as f:
+                approvals = json.load(f)
+                
+        key = f"{employee}_{date_str}"
+        approvals[key] = status
+        
+        with open(path, "w") as f:
+            json.dump(approvals, f, indent=4)
+            
+        return JSONResponse(content={"success": True})
+    except Exception as e:
+        return JSONResponse(content={"success": False, "error": str(e)})
 
 @app.post("/api/generate")
 async def generate_pdfs(request: Request):
@@ -695,18 +730,18 @@ async def download_archived_roster(path_sub: str):
         return FileResponse(path, filename=os.path.basename(path))
     return JSONResponse(content={"error": "File not found"}, status_code=404)
 
-@app.get("/api/archives/payslips_zip/{folder}")
-async def download_archived_payslips_zip(folder: str):
-    path = f"data/archives/Payslips/{folder}/All_Payslips.zip"
+@app.get("/api/archives/payslips_zip/{path_sub:path}")
+async def download_archived_payslips_zip(path_sub: str):
+    path = os.path.join("data/archives", path_sub, "All_Payslips.zip")
     if os.path.exists(path):
-        return FileResponse(path, filename=f"{folder}_All_Payslips.zip")
+        return FileResponse(path, filename=f"All_Payslips.zip")
     return JSONResponse(content={"error": "ZIP not found"}, status_code=404)
 
-@app.get("/api/archives/eft_summary/{folder}")
-async def download_archived_eft_summary(folder: str):
-    path = f"data/archives/Payslips/{folder}/EFT_Summary.xlsx"
+@app.get("/api/archives/eft_summary/{path_sub:path}")
+async def download_archived_eft_summary(path_sub: str):
+    path = os.path.join("data/archives", path_sub, "EFT_Summary.xlsx")
     if os.path.exists(path):
-        return FileResponse(path, filename=f"{folder}_EFT_Summary.xlsx")
+        return FileResponse(path, filename=f"EFT_Summary.xlsx")
     return JSONResponse(content={"error": "EFT Summary not found"}, status_code=404)
 
 @app.get("/api/archives/view/roster/{filename}")
@@ -792,6 +827,7 @@ async def accrue_leave():
 @app.get("/api/staff")
 async def get_staff():
     master_path = "data/templates/Staff_Details_Template.xlsx"
+    pins_path = "data/staff_pins.json"
     if not os.path.exists(master_path):
         return JSONResponse(content={"staff": []})
     try:
@@ -799,8 +835,17 @@ async def get_staff():
         if "Name" not in df.columns:
             return JSONResponse(content={"staff": []})
             
+        # Load PINs for mapping
+        pins = {}
+        if os.path.exists(pins_path):
+            with open(pins_path, "r") as f:
+                pins = json.load(f)
+
         staff = []
         for _, row in df.iterrows():
+            name = str(row.get("Name", "")).replace("nan", "")
+            if not name: continue
+            
             rate_str = str(row.get("Rate", "30.33")).replace("R", "").replace(",", ".").strip()
             rate_val = float(rate_str) if rate_str.lower() != "nan" and rate_str else 30.33
             
@@ -808,15 +853,52 @@ async def get_staff():
             leave_val = float(leave_str) if leave_str.lower() != "nan" and leave_str else 0.0
             
             staff.append({
-                "name": str(row.get("Name", "")).replace("nan", ""),
+                "name": name,
                 "id_number": str(row.get("ID Number", "")).replace("nan", ""),
                 "rate": rate_val,
                 "start_date": str(row.get("Start Date", "")).replace("nan", ""),
                 "leave_credit": leave_val,
                 "cell_number": str(row.get("Cell Number", "")).replace(".0", "").replace("nan", ""),
-                "role": str(row.get("Role", "WAITER")).replace("nan", "WAITER")
+                "role": str(row.get("Role", "WAITER")).replace("nan", "WAITER"),
+                "pin": pins.get(name, "")
             })
         return JSONResponse(content={"staff": staff})
+    except Exception as e:
+        return JSONResponse(content={"error": str(e)})
+
+@app.post("/api/publish_roster")
+async def publish_roster():
+    try:
+        latest = "data/input/latest_roster.xlsx"
+        published = "data/input/published_roster.xlsx"
+        if os.path.exists(latest):
+            shutil.copy(latest, published)
+            return JSONResponse(content={"success": True, "message": "Roster successfully published to the staff portal!"})
+        return JSONResponse(content={"success": False, "error": "No draft roster found to publish."})
+    except Exception as e:
+        return JSONResponse(content={"success": False, "error": str(e)})
+
+@app.get("/api/my_roster")
+async def get_my_roster(name: str):
+    roster_path = "data/input/published_roster.xlsx"
+    if not os.path.exists(roster_path):
+        return JSONResponse(content={"error": "No Roster has been published for this week yet."})
+    try:
+        df = pd.read_excel(roster_path)
+        # Normalize column names to title case for internal check, look for 'name' variant
+        df.columns = [str(c).strip() for c in df.columns]
+        name_col = next((c for c in df.columns if c.lower() == 'name'), None)
+        
+        if not name_col:
+            return JSONResponse(content={"error": "Roster format invalid (Name column missing)"})
+            
+        # Find row for user
+        user_row = df[df[name_col].astype(str).str.strip().str.lower() == name.lower()]
+        if user_row.empty:
+            return JSONResponse(content={"error": f"No shift found for {name} this week."})
+            
+        shifts = user_row.iloc[0].to_dict()
+        return JSONResponse(content={"shifts": shifts})
     except Exception as e:
         return JSONResponse(content={"error": str(e)})
 
@@ -874,6 +956,56 @@ async def save_config(request: Request):
     except Exception as e:
         return JSONResponse(content={"success": False, "error": str(e)})
 
+@app.post("/api/staff/update_profile")
+async def update_staff_profile(request: Request):
+    master_path = "data/templates/Staff_Details_Template.xlsx"
+    pins_path = "data/staff_pins.json"
+    try:
+        data = await request.json()
+        old_name = data.get("old_name", "").strip()
+        new_name = data.get("name", "").strip()
+        role = data.get("role", "").strip()
+        rate_raw = data.get("rate", 0)
+        rate = float(rate_raw) if rate_raw else 0.0
+        pin = data.get("pin", "").strip()
+        cell = data.get("cell_number", "").strip()
+        portal_access = data.get("portal_access", "MY_SHIFTS").strip()
+
+        if not old_name: return JSONResponse(content={"success": False, "error": "Old name required"})
+
+        # 1. Update Excel
+        if os.path.exists(master_path):
+            df = pd.read_excel(master_path)
+            mask = df["Name"].astype(str).str.strip().str.lower() == old_name.lower()
+            if not mask.any():
+                return JSONResponse(content={"success": False, "error": "Staff member not found in Master Excel"})
+
+            df.loc[mask, "Name"] = new_name
+            df.loc[mask, "Role"] = role
+            df.loc[mask, "Rate"] = rate
+            df.loc[mask, "Cell Number"] = cell
+            if "Portal Access" not in df.columns:
+                df["Portal Access"] = "MY_SHIFTS"
+            df.loc[mask, "Portal Access"] = portal_access
+            df.to_excel(master_path, index=False)
+        else:
+            return JSONResponse(content={"success": False, "error": "Master Excel file missing"})
+
+        # 2. Update PINs
+        pins = {}
+        if os.path.exists(pins_path):
+            with open(pins_path, "r") as f:
+                pins = json.load(f)
+        if old_name in pins:
+            del pins[old_name]
+        pins[new_name] = pin
+        with open(pins_path, "w") as f:
+            json.dump(pins, f, indent=4)
+
+        return JSONResponse(content={"success": True})
+    except Exception as e:
+        return JSONResponse(content={"success": False, "error": str(e)})
+
 @app.post("/api/staff/delete")
 async def delete_staff(request: Request):
     master_path = "data/templates/Staff_Details_Template.xlsx"
@@ -892,8 +1024,6 @@ async def delete_staff(request: Request):
 
 # --- GEMINI AI ASSISTANT ---
 
-@app.post("/api/ai/chat")
-@app.post("/api/ai/chat")
 @app.post("/api/ai/chat")
 async def ai_chat(request: Request):
     if not GEMINI_KEY:
@@ -925,6 +1055,18 @@ async def ai_chat(request: Request):
             with open(req_path, "r") as f:
                 req_data = json.load(f)
                 requests_summary = json.dumps(req_data, indent=2)
+
+        # 4. Gather AI Learning Log (manager-added notes for roster generation)
+        learning_summary = "No learning notes."
+        log_path = "data/roster_learning_log.json"
+        if os.path.exists(log_path):
+            with open(log_path, "r") as f:
+                try:
+                    log_data = json.load(f)
+                    if log_data:
+                        learning_summary = "\n".join([f"- [{e.get('date','')}] {e.get('note','')}" for e in log_data])
+                except:
+                    pass
 
         system_prompt = f"""
         You are the 'Wimpy De Ville AI Manager-on-Duty'. 
@@ -960,8 +1102,13 @@ async def ai_chat(request: Request):
           Thu: OFF
           ...
           Total Hours: XX"
-        - Always respect the Wed-Tue cycle and any APPROVED requests from the database.
-        
+        - Always respect the Wed-Tue cycle (Wednesday start, Tuesday end) and any APPROVED requests.
+        - NEVER roster an employee on a day where they have an APPROVED off-day or leave request.
+        - Minimum floor coverage: At least 2 Kitchen, 2 Waiters/FOH per shift (Sunday/Holidays: 1-2 each).
+
+        MANAGER LEARNING NOTES (apply these when generating rosters):
+        {learning_summary}
+
         USER ROLE: {user_role} ({user_name})
         """
         
@@ -1055,3 +1202,84 @@ async def send_roster(request: Request):
     except Exception as e:
         return JSONResponse(content={"success": False, "error": str(e)})
 
+
+
+# --- AI LEARNING LOG ---
+
+@app.get("/api/ai/learning_log")
+async def get_learning_log():
+    path = "data/roster_learning_log.json"
+    if not os.path.exists(path): return JSONResponse(content=[])
+    with open(path, "r") as f:
+        return JSONResponse(content=json.load(f))
+
+@app.post("/api/ai/learning_log")
+async def add_learning_log(request: Request):
+    data = await request.json()
+    note = data.get("note", "").strip()
+    if not note: return JSONResponse(content={"success": False, "error": "Note cannot be empty"})
+    path = "data/roster_learning_log.json"
+    log = []
+    if os.path.exists(path):
+        with open(path, "r") as f:
+            try: log = json.load(f)
+            except: log = []
+    log.append({"date": datetime.now().strftime("%Y-%m-%d %H:%M"), "note": note})
+    with open(path, "w") as f: json.dump(log, f, indent=4)
+    return JSONResponse(content={"success": True, "total_notes": len(log)})
+
+@app.delete("/api/ai/learning_log/{index}")
+async def delete_learning_log(index: int):
+    path = "data/roster_learning_log.json"
+    if not os.path.exists(path): return JSONResponse(content={"success": False, "error": "Log not found"})
+    with open(path, "r") as f: log = json.load(f)
+    if index < 0 or index >= len(log):
+        return JSONResponse(content={"success": False, "error": "Index out of range"})
+    log.pop(index)
+    with open(path, "w") as f: json.dump(log, f, indent=4)
+    return JSONResponse(content={"success": True})
+
+
+# --- FINGERPRINT SCANNER INTEGRATION ---
+
+@app.get("/api/fingerprint/records")
+async def get_fingerprint_records():
+    path = "data/fingerprint_scans.csv"
+    if not os.path.exists(path):
+        return JSONResponse(content={"records": []})
+    try:
+        import csv
+        records = []
+        with open(path, "r", newline="") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                records.append(dict(row))
+        return JSONResponse(content={"records": records})
+    except Exception as e:
+        return JSONResponse(content={"error": str(e)})
+
+@app.post("/api/fingerprint/sync")
+async def sync_fingerprint(request: Request):
+    data = await request.json()
+    records = data.get("records", [])
+    if not records:
+        return JSONResponse(content={"success": False, "error": "No records provided"})
+    path = "data/fingerprint_scans.csv"
+    try:
+        import csv
+        file_exists = os.path.exists(path) and os.path.getsize(path) > 0
+        with open(path, "a", newline="") as f:
+            fieldnames = ["EmployeeID", "EmployeeName", "Timestamp", "Action"]
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            if not file_exists:
+                writer.writeheader()
+            for r in records:
+                writer.writerow({
+                    "EmployeeID": r.get("EmployeeID", ""),
+                    "EmployeeName": r.get("EmployeeName", ""),
+                    "Timestamp": r.get("Timestamp", datetime.now().isoformat()),
+                    "Action": r.get("Action", "IN")
+                })
+        return JSONResponse(content={"success": True, "synced": len(records)})
+    except Exception as e:
+        return JSONResponse(content={"success": False, "error": str(e)})

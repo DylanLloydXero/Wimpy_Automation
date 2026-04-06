@@ -135,7 +135,8 @@ def launch_window():
         
         # Allow JS window.close() to shut down the app (Safe check)
         try:
-            browser.settings().setAttribute(QWebEngineSettings.WebAttribute.JavascriptCanCloseWindows, True)
+            if hasattr(QWebEngineSettings.WebAttribute, 'JavascriptCanCloseWindows'):
+                browser.settings().setAttribute(QWebEngineSettings.WebAttribute.JavascriptCanCloseWindows, True)
             browser.page().windowCloseRequested.connect(_window.close)
         except Exception as se:
             print(f"Settings Error: {se}")

@@ -98,5 +98,45 @@
         "type": "OFF_DAY",
         "status": "APPROVED",
         "timestamp": "2026-04-06 13:48"
+    },
+    {
+        "id": "1775476920.269457",
+        "employee": "Charnick Botha",
+        "off_days": [
+            "2026-05-20"
+        ],
+        "type": "OFF_DAY",
+        "status": "APPROVED",
+        "timestamp": "2026-04-06 14:02"
+    },
+    {
+        "id": "1775476920.272536",
+        "employee": "Charnick Botha",
+        "off_days": [
+            "2026-05-23"
+        ],
+        "type": "OFF_DAY",
+        "status": "APPROVED",
+        "timestamp": "2026-04-06 14:02"
+    },
+    {
+        "id": "1775479305.328842",
+        "employee": "Charnick Botha",
+        "off_days": [
+            "2026-04-10"
+        ],
+        "type": "OFF_DAY",
+        "status": "APPROVED",
+        "timestamp": "2026-04-06 14:41"
+    },
+    {
+        "id": "1775479350.80162",
+        "employee": "Charnick Botha",
+        "off_days": [
+            "2026-05-10"
+        ],
+        "type": "OFF_DAY",
+        "status": "PENDING_APPROVAL",
+        "timestamp": "2026-04-06 14:42"
     }
 ]

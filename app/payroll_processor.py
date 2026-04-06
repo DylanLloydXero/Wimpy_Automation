@@ -113,12 +113,12 @@ def process_payroll(roster_path, clockin_path, output_format='excel', output_pat
         
         if roster_df.empty or clockin_df.empty:
             print("Warning: One of the dataframes is empty after preprocessing.")
-            return None, pd.DataFrame(columns=['Employee Name']) if output_format == 'dataframe' else None
+            return (None, pd.DataFrame(columns=['Employee Name']), []) if output_format == 'dataframe' else None
             
         roster_df, clockin_df = match_names(roster_df, clockin_df)
     except Exception as e:
         print(f"Error reading Excel files: {e}")
-        return None, None if output_format == 'dataframe' else None
+        return (None, None, []) if output_format == 'dataframe' else None
 
     # Merge dataframes on Employee and Date
     merged = pd.merge(roster_df, clockin_df, 
@@ -128,9 +128,20 @@ def process_payroll(roster_path, clockin_path, output_format='excel', output_pat
     
     if merged.empty:
         print("Warning: No matching employee/date records found between roster and clock-in.")
-        return None, pd.DataFrame(columns=['Employee Name']) if output_format == 'dataframe' else None
+        return (None, pd.DataFrame(columns=['Employee Name']), []) if output_format == 'dataframe' else None
 
     results = []
+    overtime_flags = []
+    import json, os
+    approvals_path = "data/overtime_approvals.json"
+    approvals = {}
+    if os.path.exists(approvals_path):
+        try:
+            with open(approvals_path, "r") as f:
+                approvals = json.load(f)
+        except Exception:
+            pass
+
     for idx, row in merged.iterrows():
         try:
             # Parse Times
@@ -149,9 +160,31 @@ def process_payroll(roster_path, clockin_path, output_format='excel', output_pat
                 clock_in = pd.to_datetime(row[ROSTER_DATE_COL] + ' ' + row[CLOCKIN_START_COL])
                 clock_out = pd.to_datetime(row[ROSTER_DATE_COL] + ' ' + row[CLOCKIN_END_COL])
                 
-                # Use later start and earlier finish
+                # Default logic: capped at rostered end
                 start = max(rost_start, clock_in)
                 end = min(rost_end, clock_out)
+                
+                # -- OVERTIME DETECTION (> 10 mins) --
+                overtime_diff_mins = (clock_out - rost_end).total_seconds() / 60.0
+                if overtime_diff_mins > 10:
+                    flag_key = f"{row[ROSTER_EMP_COL]}_{date_val.strftime('%Y-%m-%d')}"
+                    flag_status = approvals.get(flag_key, "PENDING")
+                    
+                    if flag_status == "APPROVED":
+                        end = clock_out # grant the overtime!
+                    elif flag_status == "DENIED":
+                        end = rost_end
+                    elif flag_status == "PENDING":
+                        end = rost_end # cap until approved
+                        
+                    overtime_flags.append({
+                        "employee": row[ROSTER_EMP_COL],
+                        "date": date_val.strftime('%Y-%m-%d'),
+                        "rost_end": rost_end.strftime('%H:%M'),
+                        "clock_out": clock_out.strftime('%H:%M'),
+                        "overtime_hours": round(overtime_diff_mins / 60.0, 2),
+                        "status": flag_status
+                    })
                 
                 hours = (end - start).total_seconds() / 3600.0
                 hours_val = max(0, hours)
@@ -168,7 +201,7 @@ def process_payroll(roster_path, clockin_path, output_format='excel', output_pat
             pass
             
     if not results:
-        return None, pd.DataFrame(columns=['Employee Name']) if output_format == 'dataframe' else None
+        return (None, pd.DataFrame(columns=['Employee Name']), []) if output_format == 'dataframe' else None
         
     df_results = pd.DataFrame(results)
     summary = df_results.groupby('Employee Name').agg({
@@ -179,7 +212,7 @@ def process_payroll(roster_path, clockin_path, output_format='excel', output_pat
     }).reset_index()
     
     if output_format == 'dataframe':
-        return df_results, summary
+        return df_results, summary, overtime_flags
         
     if output_format == 'excel':
         summary.to_excel(f"{output_path}.xlsx", index=False)
