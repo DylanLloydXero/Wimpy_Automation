@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# Project Specific Data (Privacy)
+data/input/
+data/profiles/
+data/archives/
+output/
+tmp/
+*.xlsx
+*.pdf
+*.png
+
+# Configuration (Secrets)
+config.json
+
+# IDEs
+.vscode/
+.idea/
+.gemini/
+
+# Logs
+*.log

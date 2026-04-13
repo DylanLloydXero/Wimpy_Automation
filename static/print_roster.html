@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>View Roster - Wimpy BOH Portal</title>
+    <style>
+        :root {
+            --primary: #ed1c24;
+            --navy: #1e293b;
+            --bg: #f8fafc;
+            --border: #e2e8f0;
+        }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg); margin: 0; padding: 40px; color: var(--navy); }
+        .container { max-width: 1100px; margin: 0 auto; background: white; padding: 40px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); }
+        
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--primary); padding-bottom: 20px; margin-bottom: 30px; }
+        .header h1 { margin: 0; color: var(--primary); font-size: 1.8rem; }
+        .header .logo-box { background: var(--primary); color: white; width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 1.5rem; }
+
+        table { width: 100%; border-collapse: collapse; margin-bottom: 30px; border: 1px solid var(--border); }
+        th { background: var(--primary); color: white; padding: 15px; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; }
+        td { padding: 12px 15px; border: 1px solid var(--border); text-align: center; font-size: 0.9rem; }
+        tr:nth-child(even) { background: #f1f5f999; }
+        td:first-child { font-weight: bold; text-align: left; background: white !important; }
+
+        .btn-print { background: var(--primary); color: white; border: none; padding: 12px 25px; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 1rem; display: flex; align-items: center; gap: 8px; }
+        .btn-print:hover { opacity: 0.9; }
+
+        @media print {
+            .no-print { display: none !important; }
+            body { padding: 0; background: white; }
+            .container { box-shadow: none; max-width: 100%; padding: 0; }
+            th { background: #eee !important; color: black !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            tr:nth-child(even) { background: #f9f9f9 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <div class="logo-box">W</div>
+                <div>
+                    <h1 id="roster-title">Weekly Roster</h1>
+                    <div id="roster-subtitle" style="font-size: 0.9rem; color: #64748b;">Loading Roster Data...</div>
+                </div>
+            </div>
+            <div style="display: flex; gap: 10px;" class="no-print">
+                <button class="btn-print" onclick="downloadExcel()" style="background: #10b981;">📥 Download Excel</button>
+                <button class="btn-print" onclick="window.print()">🖨️ Print Roster</button>
+            </div>
+        </div>
+
+        <table id="roster-table">
+            <thead id="roster-head"></thead>
+            <tbody id="roster-body"></tbody>
+        </table>
+
+        <div style="margin-top: 50px; font-size: 0.85rem; color: #94a3b8; text-align: center; border-top: 1px solid var(--border); padding-top: 20px;">
+            Wimpy BOH Portal - Management Archive Copy
+        </div>
+    </div>
+
+    <script>
+        async function loadRoster() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const path = urlParams.get('path');
+            if(!path) {
+                document.getElementById('roster-subtitle').innerText = "Roster path missing!";
+                return;
+            }
+
+            // Extract week date for title
+            const fileName = path.split('/').pop();
+            const weekDate = fileName.replace('Roster_', '').replace('.xlsx', '');
+            document.getElementById('roster-title').innerText = `Roster: ${weekDate}`;
+
+            try {
+                const res = await fetch(`/api/archives/view/roster/${path}`);
+                const data = await res.json();
+
+                if(data.error) throw new Error(data.error);
+
+                // Build Headers
+                const head = document.getElementById('roster-head');
+                let headHtml = "<tr>";
+                data.columns.forEach(col => {
+                    headHtml += `<th>${col}</th>`;
+                });
+                headHtml += "</tr>";
+                head.innerHTML = headHtml;
+
+                // Build Rows
+                const body = document.getElementById('roster-body');
+                let bodyHtml = "";
+                data.rows.forEach(row => {
+                    const firstVal = String(row[data.columns[0]] || "");
+                    
+                    // Skip Manager/Supervisor rows or headers
+                    const valUpper = firstVal.toUpperCase();
+                    if(valUpper.includes('MANAGER') || valUpper.includes('SUPERVISOR')) {
+                        return;
+                    }
+
+                    if(firstVal.startsWith('📁')) {
+                        // This is a group header
+                        const displayName = firstVal.replace('📁 ', '').replace('GRILL', 'GRILLERS').toUpperCase();
+                        bodyHtml += `<tr style="background:#f1f5f9; border:none;"><td colspan="${data.columns.length}" style="text-align:left; font-weight:900; color:var(--primary); padding:10px 15px;">📁 ${displayName}</td></tr>`;
+                    } else {
+                        bodyHtml += "<tr>";
+                        data.columns.forEach(col => {
+                            bodyHtml += `<td>${row[col] || "OFF"}</td>`;
+                        });
+                        bodyHtml += "</tr>";
+                    }
+                });
+                body.innerHTML = bodyHtml;
+                document.getElementById('roster-subtitle').innerText = "Generated from System Archive";
+
+            } catch (err) {
+                document.getElementById('roster-subtitle').innerText = "Error loading roster: " + err.message;
+            }
+        }
+        async function downloadExcel() {
+            const path = new URLSearchParams(window.location.search).get('path');
+            if(!path) return;
+            window.location.href = `/api/archives/download/${path}`;
+        }
+        loadRoster();
+    </script>
+</body>
+</html>

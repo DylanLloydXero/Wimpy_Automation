@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Print QR - Wimpy BOH Portal</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; padding: 50px; background: white; color: #333; }
+        .card { border: 2px solid #ed1c24; border-radius: 15px; padding: 40px; display: inline-block; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+        h1 { color: #ed1c24; margin-bottom: 10px; }
+        p { font-size: 1.2rem; margin-bottom: 30px; color: #666; }
+        .qr-img { width: 300px; height: 300px; }
+        .footer { margin-top: 40px; font-size: 0.9rem; color: #999; }
+        @media print {
+            .no-print { display: none; }
+            body { padding: 0; }
+            .card { border: none; box-shadow: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-bottom: 20px;">
+            <circle cx="40" cy="40" r="40" fill="#ed1c24"/>
+            <text x="40" y="53" font-family="Georgia,serif" font-size="36" font-weight="bold" fill="white" text-anchor="middle">W</text>
+        </svg>
+        <h1>BOH Staff Portal</h1>
+        <p>Scan to Request Off-Days & View Roster</p>
+        
+        <div id="qrcode" style="display: flex; justify-content: center; margin-bottom: 30px;">
+            <div style="background: white; padding: 10px; border-radius: 10px;"></div>
+        </div>
+
+        <div class="footer" id="url-footer">
+            Loading portal details...
+        </div>
+    </div>
+    <div class="no-print" style="margin-top: 30px;">
+        <button onclick="window.print()" style="padding: 10px 25px; background: #ed1c24; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 1rem; font-weight: bold;">🖨️ Print Now</button>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script>
+        async function initQR() {
+            try {
+                const res = await fetch('/api/info');
+                const data = await res.json();
+                
+                const targetUrl = data.remote || data.lan;
+                const footer = document.getElementById('url-footer');
+                
+                if (data.remote) {
+                    footer.innerHTML = `Remote Access URL: <b>${data.remote}</b><br>(Works from home and phones)`;
+                } else {
+                    footer.innerHTML = `Local Access URL: <b>${data.lan}</b><br>(Ensure you are connected to store WiFi)`;
+                }
+
+                new QRCode(document.getElementById("qrcode").querySelector("div"), {
+                    text: targetUrl,
+                    width: 256,
+                    height: 256,
+                    colorDark : "#000000",
+                    colorLight : "#ffffff",
+                    correctLevel : QRCode.CorrectLevel.H
+                });
+            } catch (err) {
+                document.getElementById('url-footer').innerText = "Error loading portal info: " + err;
+            }
+        }
+        initQR();
+    </script>
+</body>
+</html>
